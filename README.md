@@ -236,3 +236,6 @@ docker compose logs   # Ver logs dos containers
 ## Licença
 
 MIT — use, modifique e distribua livremente.
+
+# IPTV
+Aplicativo para reprodução de listas m3u
