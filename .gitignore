@@ -1,0 +1,55 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build outputs
+.next/
+out/
+dist/
+build/
+*.apk
+*.aab
+*.ipk
+*.zip
+
+# Environment
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Cache
+.turbo/
+.eslintcache
+*.tsbuildinfo
+
+# Android
+apps/android-tv-app/android/.gradle/
+apps/android-tv-app/android/app/build/
+apps/android-tv-app/android/local.properties
+apps/android-tv-app/android/keystore.properties
+*.keystore
+*.jks
+
+# Capacitor
+apps/android-tv-app/android/app/src/main/assets/public/
+
+# OS
+.DS_Store
+Thumbs.db
+*.log
+
+# Editor
+.vscode/settings.json
+.idea/
+*.swp
+
+# Docker volumes
+postgres_data/
+redis_data/
+
+# Secrets
+*.pem
+*.key
+*.crt

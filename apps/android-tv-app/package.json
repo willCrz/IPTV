@@ -1,0 +1,23 @@
+{
+  "name": "android-tv-app",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "npm run build:web && npx cap sync android",
+    "build:web": "cd ../tv-web-app && NEXT_PUBLIC_PLATFORM=androidtv next build",
+    "build:apk": "npm run build && cd android && ./gradlew assembleDebug",
+    "build:aab": "npm run build && cd android && ./gradlew bundleRelease",
+    "build:release": "npm run build:web && npx cap sync android && cd android && ./gradlew assembleRelease",
+    "open": "npx cap open android",
+    "sync": "npx cap sync android",
+    "run": "npx cap run android"
+  },
+  "dependencies": {
+    "@capacitor/core": "^6.0.0",
+    "@capacitor/android": "^6.0.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6.0.0",
+    "typescript": "^5.4.0"
+  }
+}

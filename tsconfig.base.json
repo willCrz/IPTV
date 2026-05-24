@@ -1,0 +1,26 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "preserve",
+    "incremental": true,
+    "baseUrl": ".",
+    "paths": {
+      "@iptv/shared-types": ["./packages/shared-types/src/index.ts"],
+      "@iptv/player-core": ["./packages/player-core/src/index.ts"],
+      "@iptv/ui-core": ["./packages/ui-core/src/index.ts"],
+      "@iptv/stream-monitor": ["./packages/stream-monitor/src/index.ts"],
+      "@iptv/cache-engine": ["./packages/cache-engine/src/index.ts"]
+    }
+  },
+  "exclude": ["node_modules"]
+}

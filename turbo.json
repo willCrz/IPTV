@@ -1,0 +1,42 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "globalDependencies": ["**/.env.*local"],
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": [".next/**", "!.next/cache/**", "dist/**", "out/**"]
+    },
+    "build:titan": {
+      "dependsOn": ["^build"],
+      "outputs": ["out/**"],
+      "env": ["NEXT_PUBLIC_PLATFORM"]
+    },
+    "build:webos": {
+      "dependsOn": ["^build"],
+      "outputs": ["out/**"],
+      "env": ["NEXT_PUBLIC_PLATFORM"]
+    },
+    "build:android": {
+      "dependsOn": ["^build"],
+      "outputs": ["android/app/build/**"]
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "lint": {
+      "outputs": []
+    },
+    "test": {
+      "outputs": ["coverage/**"],
+      "dependsOn": ["^build"]
+    },
+    "type-check": {
+      "outputs": [],
+      "dependsOn": ["^build"]
+    },
+    "clean": {
+      "cache": false
+    }
+  }
+}

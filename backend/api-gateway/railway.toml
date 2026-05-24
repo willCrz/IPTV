@@ -1,0 +1,16 @@
+[build]
+builder = "DOCKERFILE"
+
+[deploy]
+startCommand = "node dist/index.js"
+healthcheckPath = "/"
+healthcheckTimeout = 60
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3
+
+# Required environment variables (set in Railway dashboard):
+#   REDIS_URL     = ${{Redis.REDIS_URL}}   (auto-injected by Railway Redis plugin)
+#   JWT_SECRET    = <random 64-char string>
+#   CORS_ORIGIN   = https://<your-tv-web-app>.up.railway.app
+#   NODE_ENV      = production
+#   PORT          = 3001

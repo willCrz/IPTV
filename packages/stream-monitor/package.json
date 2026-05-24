@@ -1,0 +1,9 @@
+{
+  "name": "@iptv/stream-monitor",
+  "version": "1.0.0",
+  "private": true,
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "dependencies": { "@iptv/shared-types": "workspace:*" },
+  "devDependencies": { "typescript": "^5.4.0" }
+}

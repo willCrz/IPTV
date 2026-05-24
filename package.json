@@ -1,0 +1,28 @@
+{
+  "name": "iptv-pro",
+  "version": "1.0.0",
+  "private": true,
+  "packageManager": "pnpm@9.0.0",
+  "scripts": {
+    "dev": "turbo run dev --parallel",
+    "build": "turbo run build",
+    "build:tv": "turbo run build --filter=tv-web-app",
+    "build:titan": "turbo run build:titan --filter=tv-web-app",
+    "build:android": "turbo run build:android --filter=android-tv-app",
+    "build:webos": "turbo run build:webos --filter=tv-web-app",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "type-check": "turbo run type-check",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f",
+    "clean": "turbo run clean && rm -rf node_modules"
+  },
+  "devDependencies": {
+    "turbo": "^2.0.0",
+    "typescript": "^5.4.0",
+    "@types/node": "^20.0.0",
+    "prettier": "^3.2.0",
+    "eslint": "^8.57.0"
+  }
+}
