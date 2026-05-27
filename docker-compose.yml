@@ -58,6 +58,9 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       CORS_ORIGIN: ${CORS_ORIGIN}
       SENTRY_DSN: ${SENTRY_DSN}
+      HEALTH_CHECK_INTERVAL: ${HEALTH_CHECK_INTERVAL:-30000}
+      PING_TIMEOUT: ${PING_TIMEOUT:-5000}
+      STREAM_TIMEOUT: ${STREAM_TIMEOUT:-10000}
     depends_on:
       postgres:
         condition: service_healthy
@@ -69,43 +72,6 @@ services:
       timeout: 10s
       retries: 5
       start_period: 20s
-
-  # ── Health Service ──────────────────────────────────────
-  health-service:
-    build:
-      context: ./backend/health-service
-      dockerfile: Dockerfile
-    container_name: iptv_health_service
-    restart: unless-stopped
-    ports:
-      - "3002:3002"
-    environment:
-      NODE_ENV: production
-      PORT: 3002
-      REDIS_URL: redis://redis:6379
-      HEALTH_CHECK_INTERVAL: ${HEALTH_CHECK_INTERVAL:-30000}
-      PING_TIMEOUT: ${PING_TIMEOUT:-5000}
-    depends_on:
-      redis:
-        condition: service_healthy
-
-  # ── Stream Service ──────────────────────────────────────
-  stream-service:
-    build:
-      context: ./backend/stream-service
-      dockerfile: Dockerfile
-    container_name: iptv_stream_service
-    restart: unless-stopped
-    ports:
-      - "3003:3003"
-    environment:
-      NODE_ENV: production
-      PORT: 3003
-      REDIS_URL: redis://redis:6379
-      STREAM_TIMEOUT: ${STREAM_TIMEOUT:-10000}
-    depends_on:
-      redis:
-        condition: service_healthy
 
   # ── TV Web App ──────────────────────────────────────────
   tv-web-app:

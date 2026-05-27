@@ -3,10 +3,12 @@ import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
 import helmet from '@fastify/helmet';
 import { createClient } from 'redis';
+import { MemoryCache, type RedisLike } from './lib/redis';
 import { healthRoutes } from './routes/health';
 import { streamRoutes } from './routes/streams';
 import { playlistRoutes } from './routes/playlists';
 import { authRoutes } from './routes/auth';
+import { monitorRoutes, startServerMonitor } from './routes/monitor';
 
 const PORT = Number(process.env.PORT ?? 3001);
 const NODE_ENV = process.env.NODE_ENV ?? 'development';
@@ -23,10 +25,19 @@ async function bootstrap() {
     requestTimeout: 30_000,
   });
 
-  // ── Redis ─────────────────────────────────────────────────
-  const redis = createClient({ url: process.env.REDIS_URL ?? 'redis://localhost:6379' });
-  redis.on('error', e => app.log.error({ msg: 'Redis error', err: e }));
-  await redis.connect();
+  // ── Redis (optional — falls back to in-memory cache) ──────
+  let redis: RedisLike;
+  const useRealRedis = Boolean(process.env.REDIS_URL);
+
+  if (useRealRedis) {
+    const realRedis = createClient({ url: process.env.REDIS_URL });
+    realRedis.on('error', e => app.log.error({ msg: 'Redis error', err: e }));
+    await realRedis.connect();
+    redis = realRedis as unknown as RedisLike;
+  } else {
+    app.log.warn('REDIS_URL not set — using in-memory cache (data lost on restart)');
+    redis = new MemoryCache();
+  }
   app.decorate('redis', redis);
 
   // ── Plugins ───────────────────────────────────────────────
@@ -45,7 +56,7 @@ async function bootstrap() {
     global: true,
     max: Number(process.env.RATE_LIMIT_MAX ?? 200),
     timeWindow: Number(process.env.RATE_LIMIT_WINDOW ?? 60_000),
-    redis,
+    ...(useRealRedis && { redis: redis as ReturnType<typeof createClient> }),
     keyGenerator: (req) => req.ip,
     errorResponseBuilder: () => ({
       statusCode: 429,
@@ -59,16 +70,14 @@ async function bootstrap() {
   await app.register(streamRoutes,  { prefix: '/api/v1/streams' });
   await app.register(playlistRoutes,{ prefix: '/api/v1/playlists' });
   await app.register(authRoutes,    { prefix: '/api/v1/auth' });
+  await app.register(monitorRoutes, { prefix: '/api/v1/monitor' });
 
-  // Health check raiz
   app.get('/', async () => ({ status: 'ok', version: process.env.npm_package_version ?? '1.0.0' }));
 
-  // 404
   app.setNotFoundHandler((_req, reply) => {
     reply.status(404).send({ error: 'Not Found', statusCode: 404 });
   });
 
-  // Error handler global
   app.setErrorHandler((err, req, reply) => {
     app.log.error({ err, url: req.url });
     const status = err.statusCode ?? 500;
@@ -83,13 +92,16 @@ async function bootstrap() {
   await app.listen({ port: PORT, host: '0.0.0.0' });
   app.log.info(`🚀 API Gateway running on port ${PORT}`);
 
-  // Graceful shutdown
+  startServerMonitor(
+    Number(process.env.HEALTH_CHECK_INTERVAL ?? 30_000),
+    Number(process.env.PING_TIMEOUT ?? 5_000),
+  );
+
   const shutdown = async () => {
     await app.close();
-    await redis.disconnect();
+    if (useRealRedis) await (redis as ReturnType<typeof createClient>).disconnect();
     process.exit(0);
   };
-
   process.on('SIGTERM', shutdown);
   process.on('SIGINT', shutdown);
 }
@@ -99,9 +111,8 @@ bootstrap().catch(err => {
   process.exit(1);
 });
 
-// TypeScript: extender Fastify com redis
 declare module 'fastify' {
   interface FastifyInstance {
-    redis: ReturnType<typeof createClient>;
+    redis: RedisLike;
   }
 }
