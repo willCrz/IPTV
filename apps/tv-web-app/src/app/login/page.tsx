@@ -7,9 +7,8 @@ import { parseM3UFromUrl, loadXtreamAll } from '@/lib/m3u';
 
 // ── Helpers ───────────────────────────────────────────────────
 function proxyIfHttp(url: string): string {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? '';
-  if (url.startsWith('http://') && apiUrl) {
-    return `${apiUrl}/api/v1/proxy?url=${encodeURIComponent(url)}`;
+  if (url.startsWith('http://')) {
+    return `/api/proxy?url=${encodeURIComponent(url)}`;
   }
   return url;
 }
