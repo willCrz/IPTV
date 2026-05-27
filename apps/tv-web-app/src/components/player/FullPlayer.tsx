@@ -197,8 +197,9 @@ const TrackPanel = memo(function TrackPanel({ videoRef, open, onClose }:{videoRe
     if (!open||!videoRef.current) return;
     const v = videoRef.current;
 
-    // Faixas nativas do video
-    const aTracks = Array.from(v.audioTracks||[]).map((t,i)=>({ id:String(i), label:t.label||`Áudio ${i+1}`, language:t.language||'', enabled:t.enabled }));
+    // Faixas nativas do video (audioTracks é não-padrão em alguns browsers)
+    const vExt = v as HTMLVideoElement & { audioTracks?: ArrayLike<{ label: string; language: string; enabled: boolean }> };
+    const aTracks = Array.from(vExt.audioTracks||[]).map((t,i)=>({ id:String(i), label:t.label||`Áudio ${i+1}`, language:t.language||'', enabled:t.enabled }));
     const tTracks = Array.from(v.textTracks||[]).map((t,i)=>({ id:String(i), label:t.label||`Legenda ${i+1}`, language:t.language||'', mode:t.mode }));
     setAudioTracks(aTracks);
     setTextTracks(tTracks);
