@@ -2,6 +2,7 @@ export interface RedisLike {
   get(key: string): Promise<string | null>;
   setEx(key: string, ttl: number, value: string): Promise<unknown>;
   del(key: string | string[]): Promise<unknown>;
+  keys(pattern: string): Promise<string[]>;
   ping(): Promise<string>;
   connect(): Promise<unknown>;
   disconnect(): Promise<unknown>;
@@ -25,6 +26,11 @@ export class MemoryCache implements RedisLike {
   async del(key: string | string[]) {
     const keys = Array.isArray(key) ? key : [key];
     keys.forEach(k => this.store.delete(k));
+  }
+
+  async keys(pattern: string) {
+    const regex = new RegExp('^' + pattern.replace(/\*/g, '.*') + '$');
+    return [...this.store.keys()].filter(k => regex.test(k));
   }
 
   async ping() { return 'PONG'; }

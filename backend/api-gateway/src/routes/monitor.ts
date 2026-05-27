@@ -9,7 +9,7 @@ async function checkServer(server: MonitoredServer, timeout: number): Promise<vo
   try {
     const controller = new AbortController();
     const t = setTimeout(() => controller.abort(), timeout);
-    const res = await fetch(`${server.url}/health`, { signal: controller.signal, cache: 'no-store' });
+    const res = await fetch(`${server.url}/health`, { signal: controller.signal });
     clearTimeout(t);
     servers.set(server.id, { ...server, status: res.ok ? 'healthy' : 'degraded', latencyMs: Date.now() - start, lastCheck: Date.now() });
   } catch {
