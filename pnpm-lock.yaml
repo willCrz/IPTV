@@ -136,6 +136,9 @@ importers:
       '@fastify/rate-limit':
         specifier: ^9.1.0
         version: 9.1.0
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.39
       fastify:
         specifier: ^4.27.0
         version: 4.29.1
@@ -145,16 +148,13 @@ importers:
       redis:
         specifier: ^4.6.0
         version: 4.7.1
-    devDependencies:
-      '@types/node':
-        specifier: ^20.0.0
-        version: 20.19.39
-      tsx:
-        specifier: ^4.7.0
-        version: 4.21.0
       typescript:
         specifier: ^5.4.0
         version: 5.9.3
+    devDependencies:
+      tsx:
+        specifier: ^4.7.0
+        version: 4.21.0
 
   backend/health-service:
     dependencies:
