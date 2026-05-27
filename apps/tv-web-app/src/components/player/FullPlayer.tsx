@@ -211,7 +211,7 @@ const TrackPanel = memo(function TrackPanel({ videoRef, open, onClose }:{videoRe
 
   const setAudio = (id:string) => {
     const v = videoRef.current; if (!v) return;
-    Array.from(v.audioTracks||[]).forEach((t,i)=>{ (t as unknown as { enabled:boolean }).enabled = String(i)===id; });
+    Array.from((v as HTMLVideoElement & { audioTracks?: ArrayLike<{ enabled: boolean }> }).audioTracks||[]).forEach((t,i)=>{ t.enabled = String(i)===id; });
     setAudioTracks(t => t.map((tr,i)=>({ ...tr, enabled:String(i)===id })));
   };
 
