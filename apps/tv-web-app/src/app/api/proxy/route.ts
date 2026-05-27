@@ -1,12 +1,31 @@
 import { type NextRequest, NextResponse } from 'next/server';
+import { unstable_cache } from 'next/cache';
 
-// In-memory response cache (survives across requests in the same process)
+// In-memory response cache (per-process; survives across requests in the same Lambda instance)
 const cache = new Map<string, { body: string; contentType: string; cachedAt: number }>();
 const JSON_TTL = 15 * 60 * 1000;  // 15 min for Xtream EPG JSON
-const XML_TTL  = 60 * 60 * 1000;  // 1 h  for XMLTV
 
 // Per-URL inflight deduplication
 const inflight = new Map<string, Promise<NextResponse>>();
+
+// Cross-invocation cache for XMLTV (uses Next.js data cache on Vercel file system).
+// Avoids re-downloading large XMLTV files on every cold Lambda start.
+const fetchXmltvCached = unstable_cache(
+  async (url: string): Promise<{ body: string; ok: boolean; status: number }> => {
+    try {
+      const res = await fetch(url, {
+        headers: { 'User-Agent': 'IPTV-Pro/1.0', 'Accept-Encoding': 'gzip, deflate' },
+      });
+      if (!res.ok) return { body: '', ok: false, status: res.status };
+      const body = await res.text();
+      return { body, ok: true, status: 200 };
+    } catch {
+      return { body: '', ok: false, status: 502 };
+    }
+  },
+  ['xmltv-proxy'],
+  { revalidate: 1200 },  // 20 min across all serverless invocations
+);
 
 // Token-bucket rate limiter: 50 tokens/s (raised for HLS segment fetches)
 let tokens = 50;
@@ -51,10 +70,35 @@ function isM3u8(url: string, contentType: string): boolean {
     contentType.includes('mpegurl') || contentType.includes('x-mpegurl');
 }
 
+// Detect XMLTV / large EPG feeds by URL pattern
+function isXmltvUrl(url: string): boolean {
+  return /\bxmltv\b/i.test(url) || /\bxmltv\.php\b/i.test(url) || url.endsWith('.xml');
+}
+
 async function doFetch(url: string): Promise<NextResponse> {
   if (!acquireToken()) {
     return NextResponse.json({ error: 'Rate limit — retry in a moment' }, {
       status: 429, headers: { 'Retry-After': '1' },
+    });
+  }
+
+  // ── XMLTV: use cross-invocation cache (avoids downloading large files on cold starts) ──
+  if (isXmltvUrl(url)) {
+    const result = await fetchXmltvCached(url);
+    if (!result.ok) {
+      if (result.status === 404) {
+        return new NextResponse('{}', {
+          headers: { 'Content-Type': 'application/json; charset=utf-8', 'X-Upstream-Status': '404' },
+        });
+      }
+      return NextResponse.json({ error: `Upstream ${result.status}` }, { status: result.status });
+    }
+    const body = result.body;
+    const contentType = body.trimStart().startsWith('<')
+      ? 'text/xml; charset=utf-8'
+      : 'application/json; charset=utf-8';
+    return new NextResponse(body, {
+      headers: { 'Content-Type': contentType, 'X-Cache': 'XMLTV' },
     });
   }
 
@@ -143,12 +187,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid url' }, { status: 400 });
   }
 
-  // Skip cache for m3u8 (live playlists must not be stale)
-  if (!isM3u8(url, '')) {
+  // Skip cache for m3u8 (live playlists must not be stale) and XMLTV (handled above)
+  if (!isM3u8(url, '') && !isXmltvUrl(url)) {
     const cached = cache.get(url);
     if (cached) {
-      const ttl = cached.contentType.includes('json') ? JSON_TTL : XML_TTL;
-      if (Date.now() - cached.cachedAt < ttl) {
+      if (Date.now() - cached.cachedAt < JSON_TTL) {
         return new NextResponse(cached.body, {
           headers: { 'Content-Type': cached.contentType, 'X-Cache': 'HIT' },
         });

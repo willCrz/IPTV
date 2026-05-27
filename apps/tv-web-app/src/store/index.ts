@@ -401,8 +401,16 @@ export const useStore = create<Store>()(
 
       loadVisibleEpg: (channels) => {
         const { playlists, epgSchedule, epgLoading } = get();
+        const now = Date.now();
 
-        const toLoad = channels.filter(ch => !epgSchedule[ch.id] && !epgLoading[ch.id]);
+        const toLoad = channels.filter(ch => {
+          if (epgLoading[ch.id]) return false;
+          const sched = epgSchedule[ch.id];
+          if (!sched) return true;                           // never fetched
+          if (sched.length === 0) return false;              // server confirmed no data
+          // Re-fetch if all programs ended more than 30 min ago (stale data)
+          return sched.every(p => new Date(p.endTime).getTime() < now - 30 * 60_000);
+        });
         if (toLoad.length === 0) return;
 
         const markLoading: Record<string, boolean> = {};
@@ -520,6 +528,10 @@ export const useStore = create<Store>()(
         token:s.token, user:s.user, isAuthenticated:s.isAuthenticated,
         playlists:s.playlists, favorites:s.favorites,
         history:s.history, activeTab:s.activeTab,
+        // EPG persisted so the user sees "now playing" instantly on next open
+        // and loadVisibleEpg skips already-loaded channels (re-fetches only stale ones)
+        epgNow: s.epgNow,
+        epgSchedule: s.epgSchedule,
       }),
     }
   )

@@ -4,7 +4,7 @@ const DB_NAME  = 'iptv-cache';
 const DB_VER   = 1;
 const STORE    = 'channels';
 const CACHE_KEY = 'main';
-const MAX_AGE  = 6 * 3600_000; // 6 hours
+const MAX_AGE  = 24 * 3600_000; // 24 hours
 
 export interface ChannelCacheEntry {
   playlistId: string;

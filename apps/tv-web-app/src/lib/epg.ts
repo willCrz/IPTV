@@ -89,9 +89,9 @@ export async function fetchXtreamChannelEpg(
   }
 }
 
-// 3 concurrent requests at a time; 300 ms gap between batches
-const BATCH_SIZE = 3;
-const BATCH_DELAY_MS = 300;
+// 10 concurrent requests at a time; 100 ms gap between batches
+const BATCH_SIZE = 10;
+const BATCH_DELAY_MS = 100;
 
 export async function fetchXtreamBatchEpg(
   serverUrl: string,
