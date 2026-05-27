@@ -147,7 +147,7 @@ export class StreamLoader {
         fragLoadingMaxRetryTimeout:  8_000,
       });
 
-      h.loadSource(url);
+      h.loadSource(proxyStreamUrl(url));
       h.attachMedia(v);
 
       h.on(Hls.Events.MANIFEST_PARSED, () => {
@@ -325,6 +325,15 @@ export class StreamLoader {
 }
 
 // ── URL helpers ───────────────────────────────────────────────────────────────
+
+// Route http:// stream URLs through the Next.js server-side proxy so the browser
+// never makes a Mixed Content request to an insecure IPTV server.
+function proxyStreamUrl(url: string): string {
+  if (url.startsWith('http://')) {
+    return `/api/proxy?url=${encodeURIComponent(url)}`;
+  }
+  return url;
+}
 
 function isHlsStream(url: string): boolean {
   try {

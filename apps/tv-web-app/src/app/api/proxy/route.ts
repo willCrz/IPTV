@@ -5,16 +5,13 @@ const cache = new Map<string, { body: string; contentType: string; cachedAt: num
 const JSON_TTL = 15 * 60 * 1000;  // 15 min for Xtream EPG JSON
 const XML_TTL  = 60 * 60 * 1000;  // 1 h  for XMLTV
 
-// Per-URL inflight deduplication: if two requests arrive for the same URL while
-// one fetch is in progress, the second waits for the first instead of hitting the
-// upstream again (prevents the burst of 429s from concurrent EPG loads).
+// Per-URL inflight deduplication
 const inflight = new Map<string, Promise<NextResponse>>();
 
-// Token-bucket rate limiter: 25 tokens/s.
-// EPG batches can hit 10+ req/s; 25 gives headroom without hammering upstream.
-let tokens = 25;
+// Token-bucket rate limiter: 50 tokens/s (raised for HLS segment fetches)
+let tokens = 50;
 let lastRefill = Date.now();
-const MAX_TOKENS = 25;
+const MAX_TOKENS = 50;
 const REFILL_INTERVAL_MS = 1000;
 
 function acquireToken(): boolean {
@@ -28,8 +25,33 @@ function acquireToken(): boolean {
   return false;
 }
 
+// Rewrite all segment/level lines in an m3u8 manifest so they go through this
+// proxy instead of being fetched directly (which would be Mixed Content).
+function rewriteM3u8(body: string, originalUrl: string): string {
+  let base: URL;
+  try { base = new URL(originalUrl); } catch { return body; }
+
+  return body.split('\n').map(line => {
+    const trimmed = line.trim();
+    // Skip comments and empty lines
+    if (!trimmed || trimmed.startsWith('#')) return line;
+    try {
+      // Resolve relative URLs against the original manifest URL
+      const abs = new URL(trimmed, base.href).href;
+      if (abs.startsWith('http://') || abs.startsWith('https://')) {
+        return `/api/proxy?url=${encodeURIComponent(abs)}`;
+      }
+    } catch { /* not a URL */ }
+    return line;
+  }).join('\n');
+}
+
+function isM3u8(url: string, contentType: string): boolean {
+  return url.includes('.m3u8') || url.includes('.m3u') ||
+    contentType.includes('mpegurl') || contentType.includes('x-mpegurl');
+}
+
 async function doFetch(url: string): Promise<NextResponse> {
-  // Rate-limit check
   if (!acquireToken()) {
     return NextResponse.json({ error: 'Rate limit — retry in a moment' }, {
       status: 429, headers: { 'Retry-After': '1' },
@@ -46,9 +68,6 @@ async function doFetch(url: string): Promise<NextResponse> {
     clearTimeout(timeout);
 
     if (!res.ok) {
-      // 404 = resource not found on upstream (e.g. channel has no EPG).
-      // Return empty JSON so clients treat it as "no data" instead of an error,
-      // and so the Next.js dev server doesn't log a noisy 404 for every EPG miss.
       if (res.status === 404) {
         return new NextResponse('{}', {
           headers: { 'Content-Type': 'application/json; charset=utf-8', 'X-Upstream-Status': '404' },
@@ -57,17 +76,49 @@ async function doFetch(url: string): Promise<NextResponse> {
       return NextResponse.json({ error: `Upstream ${res.status}` }, { status: res.status });
     }
 
+    const contentType = res.headers.get('content-type') ?? '';
+
+    // ── HLS manifest: rewrite segment URLs and return text ──
+    if (isM3u8(url, contentType)) {
+      const body = await res.text();
+      const rewritten = rewriteM3u8(body, url);
+      return new NextResponse(rewritten, {
+        headers: {
+          'Content-Type': 'application/x-mpegurl; charset=utf-8',
+          'Cache-Control': 'no-cache, no-store',  // live playlists update every few seconds
+        },
+      });
+    }
+
+    // ── Binary media (ts segments, mp4 chunks): stream through without buffering ──
+    const isBinary =
+      contentType.includes('video') ||
+      contentType.includes('audio') ||
+      contentType.includes('octet-stream') ||
+      /\.(ts|aac|mp4|fmp4|m4s)(\?|$)/.test(url);
+
+    if (isBinary) {
+      return new NextResponse(res.body, {
+        headers: {
+          'Content-Type': contentType || 'video/mp2t',
+          'Cache-Control': 'public, max-age=30',
+        },
+      });
+    }
+
+    // ── Text content (JSON API, XMLTV EPG) ──
     const body = await res.text();
     const first = body.trimStart()[0];
-    const contentType =
+    const detected =
       first === '<' ? 'text/xml; charset=utf-8'
       : first === '{' || first === '[' ? 'application/json; charset=utf-8'
-      : 'application/x-mpegurl; charset=utf-8';
+      : 'text/plain; charset=utf-8';
+    const finalType = contentType || detected;
 
-    cache.set(url, { body, contentType, cachedAt: Date.now() });
+    cache.set(url, { body, contentType: finalType, cachedAt: Date.now() });
 
     return new NextResponse(body, {
-      headers: { 'Content-Type': contentType, 'X-Cache': 'MISS' },
+      headers: { 'Content-Type': finalType, 'X-Cache': 'MISS' },
     });
   } catch (err) {
     clearTimeout(timeout);
@@ -82,16 +133,28 @@ export async function GET(req: NextRequest) {
   const url = req.nextUrl.searchParams.get('url');
   if (!url) return NextResponse.json({ error: 'url is required' }, { status: 400 });
 
-  // Cache hit — no upstream request needed
-  const cached = cache.get(url);
-  if (cached) {
-    const ttl = cached.contentType.includes('json') ? JSON_TTL : XML_TTL;
-    if (Date.now() - cached.cachedAt < ttl) {
-      return new NextResponse(cached.body, {
-        headers: { 'Content-Type': cached.contentType, 'X-Cache': 'HIT' },
-      });
+  // Validate protocol
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return NextResponse.json({ error: 'Only http/https allowed' }, { status: 400 });
     }
-    cache.delete(url);
+  } catch {
+    return NextResponse.json({ error: 'Invalid url' }, { status: 400 });
+  }
+
+  // Skip cache for m3u8 (live playlists must not be stale)
+  if (!isM3u8(url, '')) {
+    const cached = cache.get(url);
+    if (cached) {
+      const ttl = cached.contentType.includes('json') ? JSON_TTL : XML_TTL;
+      if (Date.now() - cached.cachedAt < ttl) {
+        return new NextResponse(cached.body, {
+          headers: { 'Content-Type': cached.contentType, 'X-Cache': 'HIT' },
+        });
+      }
+      cache.delete(url);
+    }
   }
 
   // Deduplicate inflight requests for the same URL
