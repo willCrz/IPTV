@@ -1,6 +1,6 @@
 {
-  "installCommand": "cd ../.. && npm install -g pnpm && pnpm install --frozen-lockfile",
-  "buildCommand": "cd ../.. && pnpm run build --filter=tv-web-app",
+  "installCommand": "cd ../.. && pnpm install",
+  "buildCommand": "pnpm run build",
   "outputDirectory": ".next",
   "framework": "nextjs"
 }
