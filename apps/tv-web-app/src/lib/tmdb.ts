@@ -86,6 +86,11 @@ interface Videos {
   results?: VideoResult[];
 }
 
+// ── In-memory cache + inflight deduplication ─────────────────
+const _cache    = new Map<string, { meta: TmdbMeta | null; cachedAt: number }>();
+const _inflight = new Map<string, Promise<TmdbMeta | null>>();
+const CACHE_TTL = 60 * 60_000; // 1 hour
+
 export async function fetchTmdbMeta(
   rawTitle: string,
   type: 'movie' | 'series',
@@ -93,10 +98,29 @@ export async function fetchTmdbMeta(
 ): Promise<TmdbMeta | null> {
   const k = getKey();
   if (!k) return null;
-
   const title = cleanTitle(rawTitle);
   if (!title) return null;
 
+  const cacheKey = `${type}:${year ?? ''}:${title}`;
+
+  const hit = _cache.get(cacheKey);
+  if (hit && Date.now() - hit.cachedAt < CACHE_TTL) return hit.meta;
+
+  const existing = _inflight.get(cacheKey);
+  if (existing) return existing;
+
+  const promise = _doFetch(title, type, year, k, cacheKey).finally(() => _inflight.delete(cacheKey));
+  _inflight.set(cacheKey, promise);
+  return promise;
+}
+
+async function _doFetch(
+  title: string,
+  type: 'movie' | 'series',
+  year: string | undefined,
+  k: string,
+  cacheKey: string,
+): Promise<TmdbMeta | null> {
   const mediaType = type === 'series' ? 'tv' : 'movie';
   const lang = { language: 'pt-BR' };
   const baseParams: Record<string, string> = { ...lang, query: title, page: '1' };
@@ -117,9 +141,15 @@ export async function fetchTmdbMeta(
     if (!hit) {
       hit = await search(baseParams);
     }
-  } catch { return null; }
+  } catch {
+    _cache.set(cacheKey, { meta: null, cachedAt: Date.now() });
+    return null;
+  }
 
-  if (!hit) return null;
+  if (!hit) {
+    _cache.set(cacheKey, { meta: null, cachedAt: Date.now() });
+    return null;
+  }
 
   const tmdbId = String(hit.id);
   const rawYear = (hit.release_date || hit.first_air_date || '').slice(0, 4);
@@ -175,7 +205,7 @@ export async function fetchTmdbMeta(
     }
   }
 
-  return {
+  const meta: TmdbMeta = {
     plot:     hit.overview || '',
     rating:   hit.vote_average ? hit.vote_average.toFixed(1) : '',
     year:     rawYear,
@@ -186,4 +216,7 @@ export async function fetchTmdbMeta(
     poster:   hit.poster_path   ? `${IMG}/w500${hit.poster_path}`    : undefined,
     backdrop: hit.backdrop_path ? `${IMG}/w1280${hit.backdrop_path}` : undefined,
   };
+
+  _cache.set(cacheKey, { meta, cachedAt: Date.now() });
+  return meta;
 }

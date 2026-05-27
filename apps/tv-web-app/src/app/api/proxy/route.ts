@@ -27,10 +27,10 @@ const fetchXmltvCached = unstable_cache(
   { revalidate: 1200 },  // 20 min across all serverless invocations
 );
 
-// Token-bucket rate limiter: 50 tokens/s (raised for HLS segment fetches)
-let tokens = 50;
+// Token-bucket rate limiter: 200 tokens/s
+let tokens = 200;
 let lastRefill = Date.now();
-const MAX_TOKENS = 50;
+const MAX_TOKENS = 200;
 const REFILL_INTERVAL_MS = 1000;
 
 function acquireToken(): boolean {
@@ -75,7 +75,7 @@ function isXmltvUrl(url: string): boolean {
   return /\bxmltv\b/i.test(url) || /\bxmltv\.php\b/i.test(url) || url.endsWith('.xml');
 }
 
-async function doFetch(url: string): Promise<NextResponse> {
+async function doFetch(url: string, rangeHeader?: string): Promise<NextResponse> {
   if (!acquireToken()) {
     return NextResponse.json({ error: 'Rate limit — retry in a moment' }, {
       status: 429, headers: { 'Retry-After': '1' },
@@ -105,13 +105,21 @@ async function doFetch(url: string): Promise<NextResponse> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 25_000);
   try {
+    const fetchHeaders: Record<string, string> = {
+      'User-Agent': 'IPTV-Pro/1.0',
+      'Accept-Encoding': 'gzip, deflate',
+    };
+    if (rangeHeader) {
+      fetchHeaders['Range'] = rangeHeader;
+      delete fetchHeaders['Accept-Encoding']; // avoid compression on partial content
+    }
     const res = await fetch(url, {
       signal: controller.signal,
-      headers: { 'User-Agent': 'IPTV-Pro/1.0', 'Accept-Encoding': 'gzip, deflate' },
+      headers: fetchHeaders,
     });
     clearTimeout(timeout);
 
-    if (!res.ok) {
+    if (!res.ok && res.status !== 206) {
       if (res.status === 404) {
         return new NextResponse('{}', {
           headers: { 'Content-Type': 'application/json; charset=utf-8', 'X-Upstream-Status': '404' },
@@ -142,12 +150,18 @@ async function doFetch(url: string): Promise<NextResponse> {
       /\.(ts|aac|mp4|fmp4|m4s)(\?|$)/.test(url);
 
     if (isBinary) {
-      return new NextResponse(res.body, {
-        headers: {
-          'Content-Type': contentType || 'video/mp2t',
-          'Cache-Control': 'public, max-age=30',
-        },
-      });
+      const binaryHeaders: Record<string, string> = {
+        'Content-Type': contentType || 'video/mp2t',
+        'Cache-Control': 'public, max-age=30',
+      };
+      // Forward range-response headers so players can seek and stream large files
+      const contentRange  = res.headers.get('content-range');
+      const acceptRanges  = res.headers.get('accept-ranges');
+      const contentLength = res.headers.get('content-length');
+      if (contentRange)  binaryHeaders['Content-Range']  = contentRange;
+      if (acceptRanges)  binaryHeaders['Accept-Ranges']  = acceptRanges;
+      if (contentLength) binaryHeaders['Content-Length'] = contentLength;
+      return new NextResponse(res.body, { status: res.status, headers: binaryHeaders });
     }
 
     // ── Text content (JSON API, XMLTV EPG) ──
@@ -186,6 +200,11 @@ export async function GET(req: NextRequest) {
   } catch {
     return NextResponse.json({ error: 'Invalid url' }, { status: 400 });
   }
+
+  const rangeHeader = req.headers.get('range') ?? undefined;
+
+  // Range requests skip cache and inflight dedup — each byte range is unique
+  if (rangeHeader) return doFetch(url, rangeHeader);
 
   // Skip cache for m3u8 (live playlists must not be stale) and XMLTV (handled above)
   if (!isM3u8(url, '') && !isXmltvUrl(url)) {
