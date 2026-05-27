@@ -14,11 +14,11 @@
     "@fastify/rate-limit": "^9.1.0",
     "@fastify/helmet": "^11.1.0",
     "redis": "^4.6.0",
-    "pino-pretty": "^11.0.0"
+    "pino-pretty": "^11.0.0",
+    "typescript": "^5.4.0",
+    "@types/node": "^20.0.0"
   },
   "devDependencies": {
-    "typescript": "^5.4.0",
-    "@types/node": "^20.0.0",
     "tsx": "^4.7.0"
   }
 }
