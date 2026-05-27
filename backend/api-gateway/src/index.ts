@@ -23,6 +23,7 @@ async function bootstrap() {
     },
     trustProxy: true,
     requestTimeout: 30_000,
+    ignoreTrailingSlash: true,
   });
 
   // ── Redis (optional — falls back to in-memory cache) ──────

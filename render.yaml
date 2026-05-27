@@ -7,12 +7,10 @@ services:
     rootDir: backend/api-gateway
     buildCommand: npm ci && npm run build
     startCommand: node dist/index.js
-    healthCheckPath: /api/v1/health
+    healthCheckPath: /
     envVars:
       - key: NODE_ENV
         value: production
-      - key: PORT
-        value: 10000
       - key: JWT_SECRET
         generateValue: true
       - key: DATABASE_URL
