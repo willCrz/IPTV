@@ -9,6 +9,7 @@ import { streamRoutes } from './routes/streams';
 import { playlistRoutes } from './routes/playlists';
 import { authRoutes } from './routes/auth';
 import { monitorRoutes, startServerMonitor } from './routes/monitor';
+import { proxyRoutes } from './routes/proxy';
 
 const PORT = Number(process.env.PORT ?? 3001);
 const NODE_ENV = process.env.NODE_ENV ?? 'development';
@@ -72,6 +73,7 @@ async function bootstrap() {
   await app.register(playlistRoutes,{ prefix: '/api/v1/playlists' });
   await app.register(authRoutes,    { prefix: '/api/v1/auth' });
   await app.register(monitorRoutes, { prefix: '/api/v1/monitor' });
+  await app.register(proxyRoutes,   { prefix: '/api/v1/proxy' });
 
   app.get('/', async () => ({ status: 'ok', version: process.env.npm_package_version ?? '1.0.0' }));
 

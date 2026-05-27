@@ -6,12 +6,18 @@ import { useStore } from '@/store';
 import { parseM3UFromUrl, loadXtreamAll } from '@/lib/m3u';
 
 // ── Helpers ───────────────────────────────────────────────────
+function proxyIfHttp(url: string): string {
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? '';
+  if (url.startsWith('http://') && apiUrl) {
+    return `${apiUrl}/api/v1/proxy?url=${encodeURIComponent(url)}`;
+  }
+  return url;
+}
+
 async function fetchXtreamInfo(server: string, user: string, pass: string) {
   const base = server.replace(/\/$/, '');
-  const res = await fetch(
-    `${base}/player_api.php?username=${encodeURIComponent(user)}&password=${encodeURIComponent(pass)}`,
-    { signal: AbortSignal.timeout(10_000) }
-  );
+  const target = `${base}/player_api.php?username=${encodeURIComponent(user)}&password=${encodeURIComponent(pass)}`;
+  const res = await fetch(proxyIfHttp(target), { signal: AbortSignal.timeout(10_000) });
   if (!res.ok) throw new Error(`Servidor retornou ${res.status}`);
   return await res.json() as {
     user_info?: { exp_date?: string | null; max_connections?: string; status?: string };

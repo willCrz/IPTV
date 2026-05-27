@@ -342,11 +342,20 @@ function normalizeUrl(url: string): string {
 
 function enc(s: string): string { return encodeURIComponent(s); }
 
+// Route http:// API calls through the backend proxy to avoid Mixed Content blocks.
+function proxyIfHttp(url: string): string {
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? '';
+  if (url.startsWith('http://') && apiUrl) {
+    return `${apiUrl}/api/v1/proxy?url=${encodeURIComponent(url)}`;
+  }
+  return url;
+}
+
 async function fetchWithTimeout(url: string, ms: number): Promise<Response> {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), ms);
   try {
-    return await fetch(url, {
+    return await fetch(proxyIfHttp(url), {
       signal: controller.signal,
       headers: { 'User-Agent': 'IPTV-Pro/1.0', 'Accept': 'application/json, text/plain, */*' },
     });
