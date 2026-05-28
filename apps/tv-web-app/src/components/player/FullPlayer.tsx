@@ -338,6 +338,21 @@ export function FullPlayer() {
 
   useEffect(()=>()=>{ loaderRef.current?.abort(); if (hideRef.current) clearTimeout(hideRef.current); },[]);
 
+  // TV remote media keys (dispatched by TVKeyboardHandler as custom 'tv:media' events)
+  useEffect(()=>{
+    const h=(e:Event)=>{
+      const { key } = (e as CustomEvent<{key:string}>).detail;
+      resetHide();
+      const v=videoRef.current; if (!v) return;
+      if (key==='MediaPlayPause'||key==='MediaPlay') { v.paused?v.play().catch(()=>{}):v.pause(); }
+      else if (key==='MediaPause'||key==='MediaStop') { v.pause(); }
+      else if (key==='MediaFastForward'&&!isLive) { v.currentTime=Math.min(v.duration||0,v.currentTime+10); }
+      else if (key==='MediaRewind'&&!isLive)         { v.currentTime=Math.max(0,v.currentTime-10); }
+    };
+    document.addEventListener('tv:media',h);
+    return ()=>document.removeEventListener('tv:media',h);
+  },[isLive,resetHide]);
+
   useEffect(()=>{
     const v=videoRef.current; if (!v) return;
     const h={
@@ -385,7 +400,7 @@ export function FullPlayer() {
   const iBtn:React.CSSProperties = { width:42, height:42, borderRadius:10, borderWidth:'1px', borderStyle:'solid', borderColor:C.border, background:'rgba(255,255,255,0.08)', color:'rgba(255,255,255,0.8)', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', transition:'all 0.15s', backdropFilter:'blur(8px)' };
 
   return (
-    <div style={{ position:'fixed', inset:0, background:'#000', zIndex:200 }} onMouseMove={resetHide} onClick={()=>!showUI&&resetHide()}>
+    <div style={{ position:'fixed', inset:0, background:'#000', zIndex:200 }} onMouseMove={resetHide} onKeyDown={resetHide} onClick={()=>!showUI&&resetHide()}>
       <video ref={videoRef} style={{ width:'100%', height:'100%', objectFit:'contain', display:'block' }} playsInline autoPlay/>
 
       {/* Buffering */}

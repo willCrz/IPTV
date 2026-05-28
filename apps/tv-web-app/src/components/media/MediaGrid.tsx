@@ -129,11 +129,21 @@ const RailCard = memo(function RailCard({ ch, isCurrent, isFav, onPlay, onDetail
   onFav: (id: string) => void;
 }) {
   const [hov, setHov] = useState(false);
+  const cardRef = useRef<HTMLDivElement>(null);
   return (
     <div
+      ref={cardRef}
+      tabIndex={0}
+      aria-label={ch.name}
       onMouseEnter={() => setHov(true)}
       onMouseLeave={() => setHov(false)}
-      style={{ position: 'relative', width: 128, flexShrink: 0, cursor: 'pointer', borderRadius: 10, overflow: 'hidden', borderWidth: '1px', borderStyle: 'solid', borderColor: isCurrent ? 'var(--amber-500)' : hov ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.07)', transform: hov ? 'scale(1.05)' : 'scale(1)', transition: 'all 0.2s', boxShadow: hov ? '0 14px 44px rgba(0,0,0,0.75)' : 'none' }}
+      onFocus={() => setHov(true)}
+      onBlur={e => { if (!cardRef.current?.contains(e.relatedTarget as Node)) setHov(false); }}
+      onKeyDown={e => {
+        if (e.key === 'Enter') { e.preventDefault(); onPlay(ch); }
+        else if (e.key === 'i' || e.key === 'I') { e.preventDefault(); onDetail(ch); }
+      }}
+      style={{ position: 'relative', width: 128, flexShrink: 0, cursor: 'pointer', borderRadius: 10, overflow: 'hidden', borderWidth: '1px', borderStyle: 'solid', borderColor: isCurrent ? 'var(--amber-500)' : hov ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.07)', transform: hov ? 'scale(1.05)' : 'scale(1)', transition: 'all 0.2s', boxShadow: hov ? '0 14px 44px rgba(0,0,0,0.75)' : 'none', outline: 'none' }}
     >
       <div style={{ aspectRatio: '2/3', background: '#0d0d14', position: 'relative', overflow: 'hidden' }}>
         {ch.logo
@@ -231,11 +241,21 @@ const PosterCard = memo(function PosterCard({ ch, isFav, isCurrent, onPlay, onFa
   onPlay: (c: Channel) => void; onFav: (id: string) => void; onDetail: (c: Channel) => void;
 }) {
   const [hov, setHov] = useState(false);
+  const cardRef = useRef<HTMLDivElement>(null);
   return (
     <div
+      ref={cardRef}
+      tabIndex={0}
+      aria-label={ch.name}
       onMouseEnter={() => setHov(true)}
       onMouseLeave={() => setHov(false)}
-      style={{ position: 'relative', cursor: 'pointer', borderRadius: 10, overflow: 'hidden', borderWidth: '1px', borderStyle: 'solid', borderColor: isCurrent ? 'var(--amber-500)' : hov ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.06)', transform: hov ? 'scale(1.04)' : 'scale(1)', transition: 'all 0.2s ease', boxShadow: hov ? '0 12px 40px rgba(0,0,0,0.7)' : 'none' }}
+      onFocus={() => setHov(true)}
+      onBlur={e => { if (!cardRef.current?.contains(e.relatedTarget as Node)) setHov(false); }}
+      onKeyDown={e => {
+        if (e.key === 'Enter') { e.preventDefault(); onPlay(ch); }
+        else if (e.key === 'i' || e.key === 'I') { e.preventDefault(); onDetail(ch); }
+      }}
+      style={{ position: 'relative', cursor: 'pointer', borderRadius: 10, overflow: 'hidden', borderWidth: '1px', borderStyle: 'solid', borderColor: isCurrent ? 'var(--amber-500)' : hov ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.06)', transform: hov ? 'scale(1.04)' : 'scale(1)', transition: 'all 0.2s ease', boxShadow: hov ? '0 12px 40px rgba(0,0,0,0.7)' : 'none', outline: 'none' }}
     >
       <div style={{ aspectRatio: '2/3', background: '#0d0d14', position: 'relative', overflow: 'hidden' }}>
         {ch.logo ? (

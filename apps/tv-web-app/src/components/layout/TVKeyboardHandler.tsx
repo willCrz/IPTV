@@ -29,10 +29,11 @@ function detectTV(): boolean {
   const ua = navigator.userAgent.toLowerCase();
   if ('tizen' in window || ua.includes('tizen')) return true;
   if ('webOS' in window || 'webOSSystem' in window || ua.includes('webos')) return true;
-  if (ua.includes('googletv')) return true;
+  if (ua.includes('googletv') || ua.includes('crkey')) return true;
   if ('TitanApp' in window || ua.includes('titanos')) return true;
-  // Android TV (has TV in UA, no touch)
   if (ua.includes(' tv') && !('ontouchstart' in window)) return true;
+  // No fine pointer (no mouse) on large screen = TV/set-top box
+  if (window.innerWidth >= 1280 && !window.matchMedia('(pointer: fine)').matches) return true;
   return false;
 }
 
@@ -99,6 +100,21 @@ export function TVKeyboardHandler() {
     if (detectTV()) {
       document.documentElement.classList.add('tv-mode');
     }
+
+    // Activate tv-mode on first arrow-key press when no fine pointer is available
+    // (catches TVs with non-standard UA strings, e.g. budget Android TV boxes)
+    const onFirstNav = (e: KeyboardEvent) => {
+      if (document.documentElement.classList.contains('tv-mode')) {
+        window.removeEventListener('keydown', onFirstNav, true);
+        return;
+      }
+      if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key) &&
+          !window.matchMedia('(pointer: fine)').matches) {
+        document.documentElement.classList.add('tv-mode');
+        window.removeEventListener('keydown', onFirstNav, true);
+      }
+    };
+    window.addEventListener('keydown', onFirstNav, true);
 
     const handle = (e: KeyboardEvent) => {
       const key  = e.key;
@@ -170,7 +186,10 @@ export function TVKeyboardHandler() {
 
     // Capture phase: runs before React synthetic handlers
     window.addEventListener('keydown', handle, true);
-    return () => window.removeEventListener('keydown', handle, true);
+    return () => {
+      window.removeEventListener('keydown', handle, true);
+      window.removeEventListener('keydown', onFirstNav, true);
+    };
   }, []);
 
   return null;

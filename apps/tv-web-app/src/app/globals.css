@@ -833,3 +833,58 @@ html.tv-mode .lk-btn {
   outline: 3px solid var(--amber-500) !important;
   outline-offset: 3px;
 }
+
+/* ============================================================
+   TV MODE — additional overrides
+   ============================================================ */
+
+/* Hide system cursor when running without a mouse */
+html.tv-mode {
+  cursor: none;
+}
+html.tv-mode * {
+  cursor: none !important;
+}
+
+/* Inline-styled divs that act as buttons (poster/rail cards, volume slider) */
+html.tv-mode [tabindex="0"]:focus,
+[tabindex="0"]:focus-visible {
+  outline: 3px solid var(--amber-500) !important;
+  outline-offset: 2px;
+}
+
+/* Override outline:none on cards — we use box-shadow so the outline
+   doesn't get clipped by overflow:hidden on the card container */
+html.tv-mode [tabindex="0"][style*="overflow: hidden"]:focus,
+[tabindex="0"][style*="overflow: hidden"]:focus-visible {
+  outline: none !important;
+  box-shadow: 0 0 0 3px var(--amber-500), 0 12px 40px rgba(0,0,0,0.7) !important;
+}
+
+/* Player controls always visible on TV (remote can't hover) */
+html.tv-mode .player-controls {
+  opacity: 1 !important;
+  pointer-events: auto !important;
+  transform: none !important;
+}
+
+/* Category chips — larger tap/focus area on TV */
+html.tv-mode button[style*="borderRadius: 999px"],
+html.tv-mode button[style*="border-radius: 999px"] {
+  min-height: 36px;
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+/* Episode/season buttons in modal */
+html.tv-mode button:focus {
+  outline: 3px solid var(--amber-500) !important;
+  outline-offset: 2px;
+}
+
+/* Scrollable rails — scroll-snap on TV for cleaner navigation */
+html.tv-mode [style*="overflowX: auto"],
+html.tv-mode [style*="overflow-x: auto"] {
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+}

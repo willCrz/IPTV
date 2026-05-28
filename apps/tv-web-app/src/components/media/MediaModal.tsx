@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, memo } from 'react';
+import { useState, useEffect, useRef, memo } from 'react';
 import { Play, Star, X, Layers, ChevronDown, ChevronUp, Film, Tv, Clapperboard } from 'lucide-react';
 import { useStore, type Channel } from '@/store';
 import { fetchTmdbMeta, cleanTitle, type TmdbMeta } from '@/lib/tmdb';
@@ -116,6 +116,7 @@ async function fetchXtreamSeriesInfo(url: string): Promise<SeriesInfo> {
 // ── MediaModal ────────────────────────────────────────────────
 export const MediaModal = memo(function MediaModal({ item, allItems = [], onClose, onPlay }: MediaModalProps) {
   const { favorites, toggleFavorite, playlists } = useStore();
+  const modalRef = useRef<HTMLDivElement>(null);
 
   const isSeries  = item.contentType === 'series';
   const isMovie   = item.contentType === 'movie';
@@ -172,6 +173,31 @@ export const MediaModal = memo(function MediaModal({ item, allItems = [], onClos
       .then(meta => { if (meta) setTmdbMeta(meta); })
       .catch(() => {});
   }, [item.id]);  // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Focus trap: keep keyboard/D-pad navigation inside the modal
+  useEffect(() => {
+    const modal = modalRef.current;
+    if (!modal) return;
+    // Auto-focus first interactive element when modal opens
+    const t = setTimeout(() => {
+      const first = modal.querySelector<HTMLElement>(
+        'button:not([disabled]), [tabindex="0"]:not([tabindex="-1"])'
+      );
+      first?.focus();
+    }, 80);
+    const trapFocus = (e: KeyboardEvent) => {
+      if (e.key !== 'Tab') return;
+      const all = Array.from(modal.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), a[href], input:not([disabled]), [tabindex="0"]'
+      )).filter(el => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; });
+      if (all.length < 2) return;
+      const first = all[0], last = all[all.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    };
+    modal.addEventListener('keydown', trapFocus);
+    return () => { clearTimeout(t); modal.removeEventListener('keydown', trapFocus); };
+  }, []);
 
   // Close trailer on TV remote Back key
   useEffect(() => {
@@ -249,7 +275,7 @@ export const MediaModal = memo(function MediaModal({ item, allItems = [], onClos
       style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.88)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 55, padding: 16, backdropFilter: 'blur(8px)' }}
       onClick={e => e.target === e.currentTarget && onClose()}
     >
-      <div style={{ background: '#111118', border: '1px solid rgba(255,255,255,0.09)', borderRadius: 20, width: '100%', maxWidth: 900, maxHeight: '92vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 40px 120px rgba(0,0,0,0.95)' }}>
+      <div ref={modalRef} style={{ background: '#111118', border: '1px solid rgba(255,255,255,0.09)', borderRadius: 20, width: '100%', maxWidth: 900, maxHeight: '92vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 40px 120px rgba(0,0,0,0.95)' }}>
 
         {/* ── Hero banner ── */}
         <div style={{ position: 'relative', height: 300, flexShrink: 0, overflow: 'hidden', background: '#080810' }}>
