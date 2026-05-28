@@ -147,7 +147,7 @@ async function doFetch(url: string, rangeHeader?: string): Promise<NextResponse>
       contentType.includes('video') ||
       contentType.includes('audio') ||
       contentType.includes('octet-stream') ||
-      /\.(ts|aac|mp4|fmp4|m4s)(\?|$)/.test(url);
+      /\.(ts|aac|mp4|fmp4|m4s|mkv|webm|avi|mov|flv)(\?|$)/i.test(url);
 
     if (isBinary) {
       const binaryHeaders: Record<string, string> = {

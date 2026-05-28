@@ -184,6 +184,19 @@ function Rail({ title, items, currentId, favorites, onPlay, onDetail, onFav, onV
   onViewAll?: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+      e.preventDefault();
+      el.scrollLeft += e.deltaY;
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, []);
+
   if (items.length === 0) return null;
   return (
     <div style={{ marginBottom: 8 }}>
@@ -274,6 +287,19 @@ export function MediaGrid({ items, cats, favorites, currentId, total, itemsTotal
   const label = type === 'movie' ? 'filmes' : 'séries';
   const [page, setPage] = useState(1);
   const gridRef = useRef<HTMLDivElement>(null);
+  const chipsRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = chipsRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+      e.preventDefault();
+      el.scrollLeft += e.deltaY;
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, []);
 
   useEffect(() => { setPage(1); }, [activeCategory, searchQuery, items]);
 
@@ -330,7 +356,7 @@ export function MediaGrid({ items, cats, favorites, currentId, total, itemsTotal
       <div style={{ padding: '12px 24px 10px', flexShrink: 0, background: '#0a0b0f', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
         <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
           {/* Chips scrollable row */}
-          <div className="scrollbar-hide" style={{ display: 'flex', gap: 6, overflowX: 'auto', flex: 1, paddingBottom: 2 }}>
+          <div ref={chipsRef} className="scrollbar-hide" style={{ display: 'flex', gap: 6, overflowX: 'auto', flex: 1, paddingBottom: 2 }}>
             <button
               onClick={() => onCategoryChange(null)}
               style={{ padding: '6px 18px', borderRadius: 999, border: 'none', cursor: 'pointer', flexShrink: 0, fontFamily: 'var(--font-sans)', fontWeight: 600, fontSize: 13, transition: 'all 0.14s', background: !activeCategory ? '#fff' : 'rgba(255,255,255,0.09)', color: !activeCategory ? '#0A0B0F' : 'rgba(255,255,255,0.55)' }}>

@@ -361,12 +361,13 @@ function buildUrlCandidates(url: string): string[] {
     add(url.replace(/\.ts$/, '.m3u8'));
     add(url);
 
-  } else if (url.endsWith('.mp4')) {
-    // Try direct .mp4 first — proxy handles Mixed Content and Range requests for seeking.
-    // .m3u8 HLS variant is tried as fallback since most Xtream VOD servers don't expose it,
-    // and waiting for the 8s HLS.js manifest timeout wastes time unnecessarily.
+  } else if (/\.(mp4|mkv|avi|mov|flv|webm|divx)$/i.test(url)) {
+    // VOD file: always try HLS variant first — each segment is < 4 MB and completes
+    // well within Vercel's 10 s function timeout. The direct file is tried as fallback
+    // for servers that don't expose an .m3u8 playlist (e.g. non-Xtream CDN links).
+    const m3u8 = url.replace(/\.(mp4|mkv|avi|mov|flv|webm|divx)$/i, '.m3u8');
+    add(m3u8);
     add(url);
-    add(url.replace(/\.mp4$/, '.m3u8'));
 
   } else {
     // Raw URL: Xtream-style /live/user/pass/id or unknown format

@@ -878,6 +878,7 @@ function LiveTVScreen({ channels, cats, activeCategory, searchQuery, epgNow, epg
   const ITEM_H = 66;   // approx tile height (padding 14 + content ~49) + 3px gap
   const CH_OVERSCAN = 5;
   const listRef = useRef<HTMLDivElement>(null);
+  const chipsRef = useRef<HTMLDivElement>(null);
   const [scrollTopCh, setScrollTopCh] = useState(0);
   const [listH, setListH] = useState(700);
 
@@ -888,6 +889,18 @@ function LiveTVScreen({ channels, cats, activeCategory, searchQuery, epgNow, epg
     const ro = new ResizeObserver(() => setListH(el.clientHeight));
     ro.observe(el);
     return () => ro.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const el = chipsRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+      e.preventDefault();
+      el.scrollLeft += e.deltaY;
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
   }, []);
 
   // Filtro local de canal por nome (campo de busca interno)
@@ -978,7 +991,7 @@ function LiveTVScreen({ channels, cats, activeCategory, searchQuery, epgNow, epg
         </div>
 
         {/* Chips de categoria — scroll horizontal */}
-        <div style={{ overflowX: 'auto', flexShrink: 0, paddingBottom: 8 }} className="scrollbar-hide">
+        <div ref={chipsRef} style={{ overflowX: 'auto', flexShrink: 0, paddingBottom: 8 }} className="scrollbar-hide">
           <div style={{ display: 'flex', gap: 6, padding: '0 10px', minWidth: 'max-content' }}>
             <button onClick={() => onCategoryChange(null)} style={chipStyle(!activeCategory)}>Todos</button>
             {cats.map(cat => (
