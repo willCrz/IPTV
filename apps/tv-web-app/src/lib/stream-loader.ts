@@ -218,11 +218,9 @@ export class StreamLoader {
         }
       };
 
-      // Do NOT set crossOrigin here — IPTV servers don't return CORS headers on
-      // media responses, so 'anonymous' would block playback. The video element
-      // without crossOrigin sends a no-cors request that works with any origin.
+      // Do NOT set crossOrigin here — the proxy is same-origin so CORS isn't needed.
       v.removeAttribute('crossorigin');
-      v.src = url;
+      v.src = proxyStreamUrl(url);
       v.load();
 
       const onOk  = () => { cleanup(); v.play().catch(() => {}); this.onReadyRef?.(); this.onBufRef?.(false); finish(true); };
@@ -364,10 +362,11 @@ function buildUrlCandidates(url: string): string[] {
     add(url);
 
   } else if (url.endsWith('.mp4')) {
-    // Xtream VOD/series MP4: most servers also expose an HLS playlist at .m3u8.
-    // HLS.js avoids the CORS issues that the native <video> path can hit.
-    add(url.replace(/\.mp4$/, '.m3u8'));
+    // Try direct .mp4 first — proxy handles Mixed Content and Range requests for seeking.
+    // .m3u8 HLS variant is tried as fallback since most Xtream VOD servers don't expose it,
+    // and waiting for the 8s HLS.js manifest timeout wastes time unnecessarily.
     add(url);
+    add(url.replace(/\.mp4$/, '.m3u8'));
 
   } else {
     // Raw URL: Xtream-style /live/user/pass/id or unknown format

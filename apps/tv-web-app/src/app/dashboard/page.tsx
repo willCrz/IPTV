@@ -23,6 +23,12 @@ const FullPlayerComp = lazy(() =>
   import('@/components/player/FullPlayer').then(m => ({ default: m.FullPlayer }))
 );
 
+// Pre-warm: kick off the FullPlayer bundle fetch immediately so it's ready
+// before the user clicks Assistir — eliminates the 1-3s lazy-load freeze.
+if (typeof window !== 'undefined') {
+  import('@/components/player/FullPlayer').catch(() => {});
+}
+
 // ── Input com label ───────────────────────────────────────────
 function Field({ label, value, onChange, placeholder, type = 'text', disabled }: {
   label: string; value: string; onChange: (v: string) => void;
@@ -1573,7 +1579,15 @@ export default function Dashboard() {
       </div>
 
       {/* Overlays */}
-      {playerOpen && !miniPlayer && <Suspense fallback={null}><FullPlayerComp/></Suspense>}
+      {playerOpen && !miniPlayer && (
+        <Suspense fallback={
+          <div style={{ position: 'fixed', inset: 0, background: '#000', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ width: 48, height: 48, borderRadius: '50%', border: '3px solid rgba(108,99,255,0.18)', borderTopColor: '#6c63ff', animation: 'spin 0.75s linear infinite' }}/>
+          </div>
+        }>
+          <FullPlayerComp/>
+        </Suspense>
+      )}
       {miniPlayer && <MiniPlayer/>}
       {showModal && <AddListModal onClose={() => setShowModal(false)}/>}
       {mediaDetail && (
