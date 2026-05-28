@@ -498,12 +498,40 @@ export function FullPlayer() {
 
           {/* Volume */}
           <div style={{ display:'flex', alignItems:'center', gap:7 }}>
-            <button onClick={()=>{ if(videoRef.current) videoRef.current.muted=!muted; }} style={{ ...iBtn, width:36, height:36 }}>
+            <button
+              onClick={()=>{ const nm=!muted; setMuted(nm); if(videoRef.current) videoRef.current.muted=nm; }}
+              style={{ ...iBtn, width:36, height:36 }}>
               {muted||vol===0?<IVolOff/>:<IVolOn/>}
             </button>
-            <input type="range" min={0} max={1} step={0.02} value={muted?0:vol}
-              onChange={e=>{ const v=Number(e.target.value); setVol(v); setMuted(false); if(videoRef.current){ videoRef.current.volume=v; videoRef.current.muted=false; } }}
-              style={{ width:90, accentColor:C.accent, cursor:'pointer' }}/>
+            {/* Custom volume slider — avoids native range fill inconsistencies */}
+            <div
+              role="slider" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round((muted?0:vol)*100)}
+              tabIndex={0}
+              style={{ width:90, height:20, display:'flex', alignItems:'center', cursor:'pointer', flexShrink:0, outline:'none' }}
+              onKeyDown={e=>{
+                let v=muted?0:vol;
+                if(e.key==='ArrowRight'||e.key==='ArrowUp'){e.preventDefault();v=Math.min(1,v+0.05);}
+                else if(e.key==='ArrowLeft'||e.key==='ArrowDown'){e.preventDefault();v=Math.max(0,v-0.05);}
+                else return;
+                setVol(v);setMuted(false);
+                if(videoRef.current){videoRef.current.volume=v;videoRef.current.muted=false;}
+              }}
+              onMouseDown={e=>{
+                e.preventDefault();
+                const track=e.currentTarget as HTMLDivElement;
+                const getV=(cx:number)=>{const r=track.getBoundingClientRect();return Math.max(0,Math.min(1,(cx-r.left)/r.width));};
+                const apply=(cx:number)=>{const v=getV(cx);setVol(v);setMuted(false);if(videoRef.current){videoRef.current.volume=v;videoRef.current.muted=false;}};
+                apply(e.clientX);
+                const mm=(ev:MouseEvent)=>apply(ev.clientX);
+                const mu=()=>{window.removeEventListener('mousemove',mm);window.removeEventListener('mouseup',mu);};
+                window.addEventListener('mousemove',mm);window.addEventListener('mouseup',mu);
+              }}
+            >
+              <div style={{position:'relative',width:'100%',height:4,borderRadius:2,background:'rgba(255,255,255,0.2)'}}>
+                <div style={{position:'absolute',left:0,top:0,height:'100%',borderRadius:2,background:C.accent,width:`${(muted?0:vol)*100}%`}}/>
+                <div style={{position:'absolute',top:'50%',left:`${(muted?0:vol)*100}%`,transform:'translate(-50%,-50%)',width:13,height:13,borderRadius:'50%',background:'#fff',boxShadow:'0 1px 4px rgba(0,0,0,0.6)',pointerEvents:'none'}}/>
+              </div>
+            </div>
             <span style={{ color:C.dim, fontSize:12, width:32 }}>{Math.round((muted?0:vol)*100)}%</span>
           </div>
 
