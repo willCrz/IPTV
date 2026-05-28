@@ -502,7 +502,7 @@ export function FullPlayer() {
               {muted||vol===0?<IVolOff/>:<IVolOn/>}
             </button>
             <input type="range" min={0} max={1} step={0.02} value={muted?0:vol}
-              onChange={e=>{ if(videoRef.current){ videoRef.current.volume=Number(e.target.value); videoRef.current.muted=false; } }}
+              onChange={e=>{ const v=Number(e.target.value); setVol(v); setMuted(false); if(videoRef.current){ videoRef.current.volume=v; videoRef.current.muted=false; } }}
               style={{ width:90, accentColor:C.accent, cursor:'pointer' }}/>
             <span style={{ color:C.dim, fontSize:12, width:32 }}>{Math.round((muted?0:vol)*100)}%</span>
           </div>
