@@ -59,13 +59,17 @@ function Field({ label, value, onChange, placeholder, type = 'text', disabled }:
   label: string; value: string; onChange: (v: string) => void;
   placeholder?: string; type?: string; disabled?: boolean;
 }) {
+  // TV browsers (Titanos / Android TV WebView) don't open the native keyboard
+  // on click unless focus() is called explicitly in the event handler.
+  const inputMode = type === 'email' ? 'email' : type === 'url' ? 'url' : 'text';
   return (
     <div>
       <label style={{ color: 'var(--fg-3)', fontSize: 12, fontWeight: 600, marginBottom: 6, display: 'block' }}>{label}</label>
       <input
         type={type} value={value} onChange={e => onChange(e.target.value)}
         placeholder={placeholder} disabled={disabled}
-        autoComplete="off" autoCorrect="off" spellCheck={false}
+        inputMode={inputMode as React.HTMLAttributes<HTMLInputElement>['inputMode']}
+        autoComplete="on" autoCorrect="off" spellCheck={false}
         style={{
           width: '100%', padding: '10px 14px', borderRadius: 8,
           background: 'var(--bg-1)', borderWidth: '1px', borderStyle: 'solid', borderColor: 'var(--line-2)',
@@ -73,6 +77,7 @@ function Field({ label, value, onChange, placeholder, type = 'text', disabled }:
           transition: 'border-color 160ms', opacity: disabled ? 0.6 : 1, boxSizing: 'border-box',
           fontFamily: 'var(--font-sans)',
         }}
+        onClick={e => { if (!disabled) e.currentTarget.focus(); }}
         onFocus={e => e.currentTarget.style.borderColor = 'var(--amber-500)'}
         onBlur={e => e.currentTarget.style.borderColor = 'var(--line-2)'}
       />

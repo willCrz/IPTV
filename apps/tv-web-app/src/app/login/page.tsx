@@ -35,6 +35,7 @@ function Field({ label, value, onChange, placeholder, type = 'text', disabled }:
   label: string; value: string; onChange: (v: string) => void;
   placeholder?: string; type?: string; disabled?: boolean;
 }) {
+  const inputMode = type === 'email' ? 'email' : type === 'url' ? 'url' : 'text';
   return (
     <div>
       <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.5)', marginBottom: 6 }}>
@@ -42,7 +43,9 @@ function Field({ label, value, onChange, placeholder, type = 'text', disabled }:
       </label>
       <input
         type={type} value={value} onChange={e => onChange(e.target.value)}
-        placeholder={placeholder} disabled={disabled} autoComplete="off"
+        placeholder={placeholder} disabled={disabled}
+        inputMode={inputMode as React.HTMLAttributes<HTMLInputElement>['inputMode']}
+        autoComplete="on" autoCorrect="off" spellCheck={false}
         style={{
           width: '100%', padding: '11px 14px',
           borderRadius: 10, background: 'rgba(255,255,255,0.06)',
@@ -51,6 +54,7 @@ function Field({ label, value, onChange, placeholder, type = 'text', disabled }:
           fontFamily: 'inherit', transition: 'border-color 160ms',
           opacity: disabled ? 0.5 : 1,
         }}
+        onClick={e => { if (!disabled) e.currentTarget.focus(); }}
         onFocus={e => { e.currentTarget.style.borderColor = '#f59e0b'; }}
         onBlur={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'; }}
       />
