@@ -13,6 +13,31 @@ import {
 import { useStore, type Channel, type EpgProgram, type Playlist } from '@/store';
 import { parseM3UFromUrl, loadXtreamAll } from '@/lib/m3u';
 import { saveChannelCache, loadChannelCache, clearChannelCache } from '@/lib/channel-cache';
+
+/** Deduplicate channels by id, keeping first occurrence. */
+function dedup(chs: Channel[]): Channel[] {
+  const seen = new Set<string>();
+  return chs.filter(c => { if (seen.has(c.id)) return false; seen.add(c.id); return true; });
+}
+
+/** Fetch a single playlist from the server (no cache). Returns live/movies/series. */
+async function fetchPlaylistContent(
+  p: Playlist,
+  onProgress?: (msg: string) => void,
+  onLiveReady?: (live: Channel[]) => void,
+): Promise<{ live: Channel[]; movies: Channel[]; series: Channel[] }> {
+  if (p.type === 'xtream' && p.serverUrl && p.username && p.password) {
+    return loadXtreamAll(p.serverUrl, p.username, p.password, { onProgress, onLiveReady });
+  } else if (p.type === 'm3u' && p.m3uUrl) {
+    onProgress?.('Baixando lista M3U...');
+    const { channels } = await parseM3UFromUrl(p.m3uUrl, p.id);
+    const lch = channels.filter(c => !c.contentType || c.contentType === 'live');
+    const mch = channels.filter(c => c.contentType === 'movie');
+    const sch = channels.filter(c => c.contentType === 'series');
+    return { live: lch.length > 0 ? lch : channels, movies: mch, series: sch };
+  }
+  return { live: [], movies: [], series: [] };
+}
 import { MiniPlayer } from '@/components/player/MiniPlayer';
 import { StreamLoader } from '@/lib/stream-loader';
 import { MediaGrid } from '@/components/media/MediaGrid';
@@ -452,7 +477,7 @@ function expiryLabel(expiresAt?: string): string {
 
 // ── Modal adicionar lista ─────────────────────────────────
 function AddListModal({ onClose }: { onClose: () => void }) {
-  const { playlists, addPlaylist, removePlaylist, login, isAuthenticated, token, setLiveChannels, setMovieItems, setSeriesItems, setAllChannels, loadAllCats: storeLoadAll } = useStore();
+  const { playlists, addPlaylist, removePlaylist, login, isAuthenticated, token, setLiveChannels, setMovieItems, setSeriesItems, setAllChannels, mergeLiveChannels, mergeChannels, loadAllCats: storeLoadAll } = useStore();
   const [tab, setTab]     = useState<'account' | 'xtream' | 'm3u'>(isAuthenticated ? 'xtream' : 'account');
   const [isReg, setReg]   = useState(false);
   const [email, setEmail]       = useState('');
@@ -495,13 +520,14 @@ function AddListModal({ onClose }: { onClose: () => void }) {
           const info = await fetchXtreamInfo(server, user, pass);
           expIso = expiresIso(info.user_info?.exp_date);
         } catch { /* expiration unknown — continue anyway */ }
+        const playlistId = `xt_${Date.now()}`;
+        const isFirst = playlists.length === 0;
         const { live, movies, series } = await loadXtreamAll(server, user, pass, {
           onProgress: setStep,
-          onLiveReady: (liveChs) => { setLiveChannels(liveChs); },
+          onLiveReady: (liveChs) => { isFirst ? setLiveChannels(liveChs) : mergeLiveChannels(liveChs); },
         });
-        setAllChannels(live, movies, series);
+        isFirst ? setAllChannels(live, movies, series) : mergeChannels(live, movies, series);
         const listName = name || `${user}@${new URL(server.includes('://') ? server : 'http://' + server).hostname}`;
-        const playlistId = `xt_${Date.now()}`;
         addPlaylist({ id: playlistId, name: listName, type: 'xtream', serverUrl: server, username: user, password: pass, expiresAt: expIso, channelCount: live.length, lastSync: new Date().toISOString() });
         saveChannelCache(playlistId, live, movies, series);
         setLoading(false);
@@ -516,15 +542,17 @@ function AddListModal({ onClose }: { onClose: () => void }) {
       } else {
         if (!m3uUrl) { setErr('URL é obrigatória'); setLoading(false); return; }
         setStep('Baixando e processando lista...');
-        const { channels, tvgUrl } = await parseM3UFromUrl(m3uUrl);
+        const playlistId = `m3u_${Date.now()}`;
+        const { channels, tvgUrl } = await parseM3UFromUrl(m3uUrl, playlistId);
         const live    = channels.filter(ch => !ch.contentType || ch.contentType === 'live');
         const movies  = channels.filter(ch => ch.contentType === 'movie');
         const series  = channels.filter(ch => ch.contentType === 'series');
         const liveChs = live.length > 0 ? live : channels;
-        setAllChannels(liveChs, movies, series);
+        playlists.length === 0
+          ? setAllChannels(liveChs, movies, series)
+          : mergeChannels(liveChs, movies, series);
         const expIso = expiresAt ? new Date(expiresAt).toISOString() : undefined;
         const channelCount = liveChs.length;
-        const playlistId = `m3u_${Date.now()}`;
         addPlaylist({ id: playlistId, name: name || 'Lista M3U', type: 'm3u', m3uUrl, xmltvEpgUrl: tvgUrl, expiresAt: expIso, channelCount, lastSync: new Date().toISOString() });
         saveChannelCache(playlistId, liveChs, movies, series);
         setLoading(false);
@@ -1317,51 +1345,62 @@ export default function Dashboard() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── Auto-reload channels from saved playlists on mount ────
+  // ── Auto-reload channels from ALL saved playlists on mount ───
   useEffect(() => {
     const saved = store.playlists;
     if (saved.length === 0 || live.items.length > 0) return;
-    const first = saved[0];
 
     const run = async () => {
-      // 1. Try IndexedDB cache first (instant load, no network)
-      const cached = await loadChannelCache(first.id);
-      if (cached) {
-        store.setLiveChannels(cached.live);
-        if (cached.movies.length > 0) store.setMovieItems(cached.movies);
-        if (cached.series.length > 0) store.setSeriesItems(cached.series);
-        return; // cache hit — skip network fetch
+      // Phase 1: load from IndexedDB cache in parallel (instant — no network)
+      const cachedAll = await Promise.all(saved.map(p => loadChannelCache(p.id)));
+      const cacheLive: Channel[] = [], cacheMovies: Channel[] = [], cacheSeries: Channel[] = [];
+      const needFetch: Playlist[] = [];
+
+      for (let i = 0; i < saved.length; i++) {
+        const c = cachedAll[i];
+        if (c) {
+          cacheLive.push(...c.live);
+          cacheMovies.push(...c.movies);
+          cacheSeries.push(...c.series);
+        } else {
+          needFetch.push(saved[i]);
+        }
       }
 
-      // 2. Cache miss: fetch from server
+      if (cacheLive.length > 0 || cacheMovies.length > 0) {
+        store.setAllChannels(dedup(cacheLive), dedup(cacheMovies), dedup(cacheSeries));
+        if (needFetch.length === 0) return;
+      }
+
+      // Phase 2: fetch playlists not in cache (parallel)
       setAutoLoading(true);
+      const fetchedLive: Channel[] = [], fetchedMovies: Channel[] = [], fetchedSeries: Channel[] = [];
+
       try {
-        if (first.type === 'xtream' && first.serverUrl && first.username && first.password) {
-          const { live: lch, movies: mch, series: sch } = await loadXtreamAll(
-            first.serverUrl, first.username, first.password,
-            {
-              onProgress: (msg) => setAutoLoadMsg(msg),
-              // Mostra canais ao vivo imediatamente sem esperar filmes/séries
-              onLiveReady: (live) => { store.setLiveChannels(live); setAutoLoading(false); },
-            },
-          );
-          store.setAllChannels(lch, mch, sch);
-          store.updatePlaylist(first.id, { channelCount: lch.length, lastSync: new Date().toISOString() });
-          saveChannelCache(first.id, lch, mch, sch);
-        } else if (first.type === 'm3u' && first.m3uUrl) {
-          setAutoLoadMsg('Baixando lista M3U...');
-          const { channels } = await parseM3UFromUrl(first.m3uUrl);
-          const lch = channels.filter(ch => !ch.contentType || ch.contentType === 'live');
-          const mch = channels.filter(ch => ch.contentType === 'movie');
-          const sch = channels.filter(ch => ch.contentType === 'series');
-          const liveChs = lch.length > 0 ? lch : channels;
-          store.setAllChannels(liveChs, mch, sch);
-          store.updatePlaylist(first.id, { channelCount: liveChs.length, lastSync: new Date().toISOString() });
-          saveChannelCache(first.id, liveChs, mch, sch);
-        }
-      } catch (e) {
-        setAutoLoadMsg((e instanceof Error ? e.message : 'Erro ao carregar lista') + ' — tente adicionar a lista novamente.');
-        await new Promise(r => setTimeout(r, 3000));
+        await Promise.allSettled(needFetch.map(async (p) => {
+          try {
+            const { live: lch, movies: mch, series: sch } = await fetchPlaylistContent(
+              p,
+              (msg) => setAutoLoadMsg(msg),
+              // For Xtream: show live channels immediately while movies/series load
+              p.type === 'xtream'
+                ? (liveChs) => { store.mergeLiveChannels(liveChs); setAutoLoading(false); }
+                : undefined,
+            );
+            fetchedLive.push(...lch);
+            fetchedMovies.push(...mch);
+            fetchedSeries.push(...sch);
+            store.updatePlaylist(p.id, { channelCount: lch.length, lastSync: new Date().toISOString() });
+            saveChannelCache(p.id, lch, mch, sch);
+          } catch (e) {
+            setAutoLoadMsg((e instanceof Error ? e.message : 'Erro') + ' — tente recarregar.');
+          }
+        }));
+
+        const allLive   = dedup([...cacheLive,   ...fetchedLive]);
+        const allMovies = dedup([...cacheMovies, ...fetchedMovies]);
+        const allSeries = dedup([...cacheSeries, ...fetchedSeries]);
+        store.setAllChannels(allLive, allMovies, allSeries);
       } finally { setAutoLoading(false); }
     };
     run();
@@ -1381,33 +1420,45 @@ export default function Dashboard() {
     }
   }, [setCurrentChannel, playMedia, addHistory, setMediaDetail]);
 
-  const handleSyncPlaylist = useCallback(async (p: Playlist) => {
-    setSyncingId(p.id);
+  const handleSyncPlaylist = useCallback(async (targetPlaylist: Playlist) => {
+    setSyncingId(targetPlaylist.id);
     setAutoLoadMsg('Sincronizando lista...');
     setAutoLoading(true);
     try {
-      if (p.type === 'xtream' && p.serverUrl && p.username && p.password) {
-        const { live: lch, movies: mch, series: sch } = await loadXtreamAll(
-          p.serverUrl, p.username, p.password,
-          {
-            onProgress: (msg) => setAutoLoadMsg(msg),
-            onLiveReady: (live) => { store.setLiveChannels(live); setAutoLoading(false); },
-          },
-        );
-        store.setAllChannels(lch, mch, sch);
-        store.updatePlaylist(p.id, { channelCount: lch.length, lastSync: new Date().toISOString() });
-        saveChannelCache(p.id, lch, mch, sch);
-      } else if (p.type === 'm3u' && p.m3uUrl) {
-        setAutoLoadMsg('Baixando lista M3U...');
-        const { channels } = await parseM3UFromUrl(p.m3uUrl);
-        const lch = channels.filter(ch => !ch.contentType || ch.contentType === 'live');
-        const mch = channels.filter(ch => ch.contentType === 'movie');
-        const sch = channels.filter(ch => ch.contentType === 'series');
-        const liveChs = lch.length > 0 ? lch : channels;
-        store.setAllChannels(liveChs, mch, sch);
-        store.updatePlaylist(p.id, { channelCount: liveChs.length, lastSync: new Date().toISOString() });
-        saveChannelCache(p.id, liveChs, mch, sch);
-      }
+      const allPl = store.playlists;
+      const allLive: Channel[] = [], allMovies: Channel[] = [], allSeries: Channel[] = [];
+
+      await Promise.allSettled(allPl.map(async (pl) => {
+        let lch: Channel[], mch: Channel[], sch: Channel[];
+        if (pl.id === targetPlaylist.id) {
+          // Fresh network fetch for the target playlist
+          const r = await fetchPlaylistContent(
+            pl,
+            (msg) => setAutoLoadMsg(msg),
+            pl.type === 'xtream'
+              ? (liveChs) => { store.mergeLiveChannels(liveChs); setAutoLoading(false); }
+              : undefined,
+          );
+          lch = r.live; mch = r.movies; sch = r.series;
+          store.updatePlaylist(pl.id, { channelCount: lch.length, lastSync: new Date().toISOString() });
+          saveChannelCache(pl.id, lch, mch, sch);
+        } else {
+          // Load other playlists from cache (fetch if expired)
+          const cached = await loadChannelCache(pl.id);
+          if (cached) {
+            lch = cached.live; mch = cached.movies; sch = cached.series;
+          } else {
+            const r = await fetchPlaylistContent(pl);
+            lch = r.live; mch = r.movies; sch = r.series;
+            saveChannelCache(pl.id, lch, mch, sch);
+          }
+        }
+        allLive.push(...lch);
+        allMovies.push(...mch);
+        allSeries.push(...sch);
+      }));
+
+      store.setAllChannels(dedup(allLive), dedup(allMovies), dedup(allSeries));
       setActiveTab('live');
     } catch (e) {
       setAutoLoadMsg((e instanceof Error ? e.message : 'Erro ao sincronizar') + ' — verifique a conexão.');

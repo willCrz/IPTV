@@ -232,7 +232,7 @@ export interface M3UResult {
   tvgUrl?: string;
 }
 
-export async function parseM3UFromUrl(url: string): Promise<M3UResult> {
+export async function parseM3UFromUrl(url: string, playlistKey = 'm3u'): Promise<M3UResult> {
   let res: Response;
   try { res = await fetchWithTimeout(url, 20000); }
   catch (e) { throw new Error(`Não foi possível baixar a lista M3U.\n(${(e as Error).message})`); }
@@ -240,7 +240,7 @@ export async function parseM3UFromUrl(url: string): Promise<M3UResult> {
   const text = await res.text();
   if (!text.includes('#EXTM3U') && !text.includes('#EXTINF'))
     throw new Error('Arquivo não parece ser uma lista M3U válida.');
-  const result = parseM3UText(text);
+  const result = parseM3UText(text, playlistKey);
   // If no url-tvg was found in the M3U header, auto-detect from Xtream-format URL.
   if (!result.tvgUrl) result.tvgUrl = detectXtreamXmltvFromM3uUrl(url);
   return result;
@@ -260,7 +260,7 @@ function detectXtreamXmltvFromM3uUrl(m3uUrl: string): string | undefined {
   return undefined;
 }
 
-export function parseM3UText(text: string): M3UResult {
+export function parseM3UText(text: string, playlistKey = 'm3u'): M3UResult {
   const lines = text.split(/\r?\n/);
   const channels: Channel[] = [];
 
@@ -291,13 +291,13 @@ export function parseM3UText(text: string): M3UResult {
     const tvgId = attrs['tvg-id'] || attrs['tvgid'] || undefined;
 
     channels.push({
-      id: `m3u_${channels.length}`,
+      id: `${playlistKey}_${channels.length}`,
       name,
       streamUrl,
       logo: attrs['tvg-logo'] || attrs['logo'] || '',
       groupTitle,
       num: attrs['tvg-chno'] ? parseInt(attrs['tvg-chno']) : channels.length + 1,
-      contentType: detectM3uContentType(groupTitle, name, attrs['tvg-type'] || attrs['type']),
+      contentType: detectM3uContentType(groupTitle, name, attrs['tvg-type'] || attrs['type'], streamUrl),
       tvgId,
     });
   }
@@ -315,20 +315,30 @@ function parseAttrs(line: string): Record<string, string> {
   return attrs;
 }
 
-function detectM3uContentType(group: string, name: string, tvgType?: string): 'live' | 'movie' | 'series' {
+function detectM3uContentType(group: string, name: string, tvgType?: string, streamUrl?: string): 'live' | 'movie' | 'series' {
   if (tvgType) {
     const t = tvgType.toLowerCase();
     if (t === 'movie' || t === 'vod') return 'movie';
     if (t === 'series' || t === 'serie' || t === 'tvshow') return 'series';
   }
+  // URL path detection (reliable for Xtream-format streams: /movie/ /series/ /vod/)
+  if (streamUrl) {
+    const p = streamUrl.toLowerCase();
+    if (/\/(movies?|vod|films?|cine)\//i.test(p)) return 'movie';
+    if (/\/(series?|tvshows?|shows?)\//i.test(p)) return 'series';
+  }
   const g = group.toLowerCase();
   const n = name.toLowerCase();
-  // Match VOD/movie groups
-  if (/\b(film|filme|movie|vod|cine|cinema)\b/.test(g)) return 'movie';
-  // Match series groups (includes "S01E02" pattern in name)
-  if (/\b(s[eé]rie|series|temporada|season|tvshow|show)\b/.test(g)) return 'series';
-  // Detect episode format in name: S01E02, 1x02, etc.
+  // Group-based detection — multilingual (PT/EN/ES/FR/IT/DE)
+  if (/\b(film|filme|movie|vod|cine|cinema|pelicula|pellicule|kino)\b/.test(g)) return 'movie';
+  if (/\b(s[eé]rie|series|temporada|season|tvshow|show|saison|stagione|staffel)\b/.test(g)) return 'series';
+  // Episode markers in name: S01E02, T1E2, 1x02, EP01, "Episodio 3", "Temporada 2"
   if (/\bS\d{2}E\d{2}\b/i.test(n) || /\b\d{1,2}x\d{2}\b/.test(n)) return 'series';
+  if (/\bT\d{1,2}\s*E\d{1,2}\b/i.test(n)) return 'series';
+  if (/\bEP?\s*\d{2,3}\b/i.test(n)) return 'series';
+  if (/\b(episode|episodio|epis[oó]dio|temporada)\s*\d+/i.test(n)) return 'series';
+  // Year pattern alone (without episode markers) hints at a movie
+  if (/\(\d{4}\)/.test(n)) return 'movie';
   return 'live';
 }
 

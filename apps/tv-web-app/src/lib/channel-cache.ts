@@ -3,7 +3,6 @@ import type { Channel } from '@/store';
 const DB_NAME  = 'iptv-cache';
 const DB_VER   = 1;
 const STORE    = 'channels';
-const CACHE_KEY = 'main';
 const MAX_AGE  = 24 * 3600_000; // 24 hours
 
 export interface ChannelCacheEntry {
@@ -33,7 +32,7 @@ export async function saveChannelCache(
     const entry: ChannelCacheEntry = { playlistId, live, movies, series, savedAt: Date.now() };
     await new Promise<void>((res, rej) => {
       const tx = db.transaction(STORE, 'readwrite');
-      tx.objectStore(STORE).put(entry, CACHE_KEY);
+      tx.objectStore(STORE).put(entry, playlistId);
       tx.oncomplete = () => res();
       tx.onerror    = () => rej(tx.error);
     });
@@ -45,12 +44,11 @@ export async function loadChannelCache(playlistId: string): Promise<ChannelCache
     const db = await openDB();
     const entry = await new Promise<ChannelCacheEntry | undefined>((res, rej) => {
       const tx = db.transaction(STORE, 'readonly');
-      const req = tx.objectStore(STORE).get(CACHE_KEY);
+      const req = tx.objectStore(STORE).get(playlistId);
       req.onsuccess = () => res(req.result as ChannelCacheEntry | undefined);
       req.onerror   = () => rej(req.error);
     });
     if (!entry) return null;
-    if (entry.playlistId !== playlistId) return null;
     if (Date.now() - entry.savedAt > MAX_AGE) return null;
     return entry;
   } catch {
@@ -58,12 +56,18 @@ export async function loadChannelCache(playlistId: string): Promise<ChannelCache
   }
 }
 
-export async function clearChannelCache(): Promise<void> {
+/** Clear a specific playlist's cache, or all entries if no id given. */
+export async function clearChannelCache(playlistId?: string): Promise<void> {
   try {
     const db = await openDB();
     await new Promise<void>((res, rej) => {
       const tx = db.transaction(STORE, 'readwrite');
-      tx.objectStore(STORE).delete(CACHE_KEY);
+      const store = tx.objectStore(STORE);
+      if (playlistId) {
+        store.delete(playlistId);
+      } else {
+        store.clear();
+      }
       tx.oncomplete = () => res();
       tx.onerror    = () => rej(tx.error);
     });

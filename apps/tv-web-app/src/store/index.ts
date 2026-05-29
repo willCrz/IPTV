@@ -93,6 +93,9 @@ interface Store {
   setSeriesItems: (chs: Channel[]) => void;
   // Atualiza os três em uma única operação (1 re-render)
   setAllChannels: (live: Channel[], movies: Channel[], series: Channel[]) => void;
+  // Mescla canais de múltiplas playlists sem apagar os existentes (dedup por id)
+  mergeLiveChannels: (chs: Channel[]) => void;
+  mergeChannels: (live: Channel[], movies: Channel[], series: Channel[]) => void;
 
   // EPG
   epgNow: Record<string, EpgProgram>;
@@ -354,6 +357,33 @@ export const useStore = create<Store>()(
           counts: { live:liveChs.length, movie:movieChs.length, series:seriesChs.length },
         });
       },
+      mergeLiveChannels: (chs) => {
+        set(s => {
+          const ids = new Set(s.live.items.map(c => c.id));
+          const merged = [...s.live.items, ...chs.filter(c => !ids.has(c.id))];
+          return {
+            live: { cats:buildCats(merged), total:merged.length, catsLoaded:true, items:merged, itemsPage:1, itemsTotal:merged.length, itemsLoaded:true, searchItems:[], searchLoaded:false },
+            counts: { ...s.counts, live:merged.length },
+          };
+        });
+      },
+      mergeChannels: (liveChs, movieChs, seriesChs) => {
+        set(s => {
+          const mrg = <T extends { id:string }>(existing: T[], incoming: T[]) => {
+            const ids = new Set(existing.map(c => c.id));
+            return [...existing, ...incoming.filter(c => !ids.has(c.id))];
+          };
+          const newLive   = mrg(s.live.items,   liveChs);
+          const newMovies = mrg(s.movies.items, movieChs);
+          const newSeries = mrg(s.series.items, seriesChs);
+          return {
+            live:   { cats:buildCats(newLive),   total:newLive.length,   catsLoaded:true, items:newLive,   itemsPage:1, itemsTotal:newLive.length,   itemsLoaded:true, searchItems:[], searchLoaded:false },
+            movies: { cats:buildCats(newMovies), total:newMovies.length, catsLoaded:true, items:newMovies, itemsPage:1, itemsTotal:newMovies.length, itemsLoaded:true, searchItems:[], searchLoaded:false },
+            series: { cats:buildCats(newSeries), total:newSeries.length, catsLoaded:true, items:newSeries, itemsPage:1, itemsTotal:newSeries.length, itemsLoaded:true, searchItems:[], searchLoaded:false },
+            counts: { live:newLive.length, movie:newMovies.length, series:newSeries.length },
+          };
+        });
+      },
 
       // EPG
       epgNow: {},
@@ -417,42 +447,47 @@ export const useStore = create<Store>()(
         toLoad.forEach(ch => { markLoading[ch.id] = true; });
         set(s => ({ epgLoading: { ...s.epgLoading, ...markLoading } }));
 
-        // For Xtream playlists the canonical EPG feed is /xmltv.php — one request
-        // covers every channel. Short EPG is the last-resort fallback for channels
-        // not found in XMLTV.  For M3U playlists we use xmltvEpgUrl (captured from
-        // the list's url-tvg header) or auto-detect it from Xtream-format M3U URLs.
-        const xtPlaylist = playlists.find(p =>
-          p.type === 'xtream' && p.serverUrl && p.username && p.password
-        );
-        const m3uPlaylist = playlists.find(p => p.type === 'm3u');
-        const xmltvUrl: string | undefined =
-          xtPlaylist
-            ? buildXtreamXmltvUrl(xtPlaylist.serverUrl!, xtPlaylist.username!, xtPlaylist.password!)
-            : (m3uPlaylist?.xmltvEpgUrl || detectXtreamXmltvFromM3uUrl(m3uPlaylist?.m3uUrl));
+        // Collect XMLTV EPG URLs from ALL playlists (Xtream uses /xmltv.php,
+        // M3U playlists use the url-tvg header or auto-detected Xtream URL).
+        // Multiple sources are tried in parallel so channels from any playlist get EPG.
+        const xmltvUrls: string[] = [];
+        let xtPlaylist = playlists.find(p => p.type === 'xtream' && p.serverUrl && p.username && p.password);
+        for (const p of playlists) {
+          if (p.type === 'xtream' && p.serverUrl && p.username && p.password) {
+            const url = buildXtreamXmltvUrl(p.serverUrl, p.username, p.password);
+            if (!xmltvUrls.includes(url)) xmltvUrls.push(url);
+          } else if (p.type === 'm3u') {
+            const url = p.xmltvEpgUrl || detectXtreamXmltvFromM3uUrl(p.m3uUrl);
+            if (url && !xmltvUrls.includes(url)) xmltvUrls.push(url);
+          }
+        }
 
         const loadEpg = async () => {
           const newSchedule: Record<string, EpgProgram[]> = {};
           const newNow:      Record<string, EpgProgram>   = {};
           const clearLoad:   Record<string, boolean>       = {};
 
-          // Step 1: XMLTV for channels with tvgId — one request covers all channels.
-          // Only write to newSchedule when the XMLTV actually has programmes for that
-          // channel; channels with 0 matches fall through to short EPG in step 2.
+          // Step 1: try ALL XMLTV sources in parallel — one request per source covers
+          // all channels from that playlist. Channels not matched fall through to step 2.
           const xmltvChs = toLoad.filter(ch => ch.tvgId);
-          if (xmltvUrl && xmltvChs.length > 0) {
-            try {
-              const tvgIds   = [...new Set(xmltvChs.map(ch => ch.tvgId!))];
-              const xmltvRes = await fetchXmltvEpg(xmltvUrl, tvgIds);
+          if (xmltvUrls.length > 0 && xmltvChs.length > 0) {
+            const tvgIds = [...new Set(xmltvChs.map(ch => ch.tvgId!))];
+            const xmltvResults = await Promise.allSettled(
+              xmltvUrls.map(url => fetchXmltvEpg(url, tvgIds))
+            );
+            for (const result of xmltvResults) {
+              if (result.status !== 'fulfilled') continue;
+              const xmltvRes = result.value;
               for (const ch of xmltvChs) {
+                if (newSchedule[ch.id] !== undefined) continue; // already matched
                 const progs = (xmltvRes[ch.tvgId!] || []).map(p => ({ ...p, channelId: ch.id }));
                 if (progs.length > 0) {
                   newSchedule[ch.id] = progs;
                   const nowProg = progs.find(p => p.isNow);
                   if (nowProg) newNow[ch.id] = nowProg;
                 }
-                // if progs.length === 0, leave newSchedule[ch.id] unset so step 2 can try
               }
-            } catch { /* XMLTV fetch failed — all channels fall through to short EPG */ }
+            }
           }
 
           // Step 2: short EPG for Xtream channels not yet covered by XMLTV.
