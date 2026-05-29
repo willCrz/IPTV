@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { fetchXtreamBatchEpg, fetchXmltvEpg, buildXtreamXmltvUrl } from '@/lib/epg';
+import { fetchXtreamBatchEpg, fetchXmltvEpgForChannels, buildXtreamXmltvUrl } from '@/lib/epg';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
 
@@ -467,24 +467,22 @@ export const useStore = create<Store>()(
           const newNow:      Record<string, EpgProgram>   = {};
           const clearLoad:   Record<string, boolean>       = {};
 
-          // Step 1: try ALL XMLTV sources in parallel — one request per source covers
-          // all channels from that playlist. Channels not matched fall through to step 2.
-          const xmltvChs = toLoad.filter(ch => ch.tvgId);
-          if (xmltvUrls.length > 0 && xmltvChs.length > 0) {
-            const tvgIds = [...new Set(xmltvChs.map(ch => ch.tvgId!))];
+          // Step 1: try ALL XMLTV sources in parallel — uses tvgId match first,
+          // then falls back to normalized channel-name matching for unmatched channels.
+          if (xmltvUrls.length > 0 && toLoad.length > 0) {
+            const xmltvChs = toLoad.map(ch => ({ id: ch.id, tvgId: ch.tvgId, name: ch.name }));
             const xmltvResults = await Promise.allSettled(
-              xmltvUrls.map(url => fetchXmltvEpg(url, tvgIds))
+              xmltvUrls.map(url => fetchXmltvEpgForChannels(url, xmltvChs))
             );
             for (const result of xmltvResults) {
               if (result.status !== 'fulfilled') continue;
               const xmltvRes = result.value;
-              for (const ch of xmltvChs) {
-                if (newSchedule[ch.id] !== undefined) continue; // already matched
-                const progs = (xmltvRes[ch.tvgId!] || []).map(p => ({ ...p, channelId: ch.id }));
+              for (const [chId, progs] of Object.entries(xmltvRes)) {
+                if (newSchedule[chId] !== undefined) continue; // already matched by a prior URL
                 if (progs.length > 0) {
-                  newSchedule[ch.id] = progs;
+                  newSchedule[chId] = progs;
                   const nowProg = progs.find(p => p.isNow);
-                  if (nowProg) newNow[ch.id] = nowProg;
+                  if (nowProg) newNow[chId] = nowProg;
                 }
               }
             }

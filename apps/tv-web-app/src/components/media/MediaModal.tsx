@@ -49,6 +49,8 @@ function validRating(r?: string): string {
 // ── Fetch Xtream VOD (movie) full info ────────────────────────
 interface MovieInfo {
   plot: string; cast: string; director: string; genre: string; rating: string;
+  year: string;   // from releasedate field
+  cover: string;  // from movie_image (TMDB poster URL)
 }
 
 async function fetchXtreamMovieInfo(server: string, user: string, pass: string, vodId: string): Promise<MovieInfo> {
@@ -60,6 +62,7 @@ async function fetchXtreamMovieInfo(server: string, user: string, pass: string, 
     info?: {
       plot?: string; cast?: string; director?: string; genre?: string;
       rating?: string; rating_5based?: string;
+      releasedate?: string; movie_image?: string; backdrop_path?: string;
     };
   };
   return {
@@ -68,6 +71,8 @@ async function fetchXtreamMovieInfo(server: string, user: string, pass: string, 
     director: data.info?.director || '',
     genre:    data.info?.genre    || '',
     rating:   data.info?.rating   || data.info?.rating_5based || '',
+    year:     (data.info?.releasedate || '').slice(0, 4),
+    cover:    data.info?.movie_image  || data.info?.backdrop_path || '',
   };
 }
 
@@ -265,7 +270,13 @@ export const MediaModal = memo(function MediaModal({ item, allItems = [], onClos
     }
   };
 
-  const backdropSrc = (isSeries ? seriesInfo?.backdrop : null)
+  // Year: prefer Xtream vod_info (has releasedate) → TMDB → channel field (skip "0")
+  const displayYear =
+    (isSeries ? (seriesInfo?.releaseDate || '').slice(0, 4) : movieInfo?.year)
+    || tmdbMeta?.year
+    || (item.year && item.year !== '0' ? item.year : '');
+
+  const backdropSrc = (isSeries ? seriesInfo?.backdrop : movieInfo?.cover)
     || tmdbMeta?.backdrop
     || tmdbMeta?.poster
     || item.logo;
@@ -308,7 +319,7 @@ export const MediaModal = memo(function MediaModal({ item, allItems = [], onClos
                 {isMovie ? <Film size={11} /> : <Tv size={11} />}
                 {isMovie ? 'FILME' : 'SÉRIE'}
               </span>
-              {item.year && <span style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12 }}>{item.year}</span>}
+              {displayYear && <span style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12 }}>{displayYear}</span>}
               {displayRating && (
                 <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#fbbf24', fontSize: 12, fontWeight: 600 }}>
                   <Star size={11} fill="#fbbf24" /> {displayRating}

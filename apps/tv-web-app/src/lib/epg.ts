@@ -126,19 +126,49 @@ export async function fetchXtreamBatchEpg(
 
 // ── XMLTV EPG ────────────────────────────────────────────────
 
-/** In-memory cache: xmltvUrl → { programs by tvgId, timestamp } */
-const xmltvCache = new Map<string, { programs: Record<string, EpgProgram[]>; parsedAt: number }>();
+/** Normalize a channel name for fuzzy matching (strip quality/variant tags) */
+function normName(n: string): string {
+  return n.toLowerCase()
+    .replace(/\s*[\[(](uhd|4k|fhd|hd|sd|h\.?265|h265|alt\d*|alt|backup)[)\]]/gi, '')
+    .replace(/\s+(uhd|4k|fhd|hd|sd)(\s|$)/gi, ' ')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/** In-memory cache: xmltvUrl → { programs by tvgId, nameMap, timestamp } */
+const xmltvCache = new Map<string, {
+  programs: Record<string, EpgProgram[]>;
+  /** Normalized display-name → XMLTV channel id — only for non-zero ids */
+  nameMap: Record<string, string>;
+  parsedAt: number;
+}>();
 const XMLTV_TTL     = 20 * 60_000; // 20 minutes for valid data
 const XMLTV_ERR_TTL =  5 * 60_000; // 5 minutes before retrying a failed URL
 
-/** Parse a full XMLTV document and return programs indexed by channel attribute */
-function parseXmltvDoc(xmlText: string): Record<string, EpgProgram[]> {
-  if (typeof DOMParser === 'undefined') return {};
+/** Parse a full XMLTV document; returns programs by channel-id and a name→id map */
+function parseXmltvDoc(xmlText: string): {
+  programs: Record<string, EpgProgram[]>;
+  nameMap: Record<string, string>;
+} {
+  if (typeof DOMParser === 'undefined') return { programs: {}, nameMap: {} };
 
   const parser = new DOMParser();
   const doc = parser.parseFromString(xmlText, 'text/xml');
 
-  if (doc.querySelector('parsererror')) return {};
+  if (doc.querySelector('parsererror')) return { programs: {}, nameMap: {} };
+
+  // Build name→id map from <channel> declarations (skip id="0" — not unique)
+  const nameMap: Record<string, string> = {};
+  for (const ch of doc.querySelectorAll('channel')) {
+    const id = ch.getAttribute('id') || '0';
+    if (id === '0') continue;
+    const displayName = ch.querySelector('display-name')?.textContent?.trim();
+    if (displayName) {
+      const norm = normName(displayName);
+      if (norm && !nameMap[norm]) nameMap[norm] = id;
+    }
+  }
 
   const programs: Record<string, EpgProgram[]> = {};
   const now = Date.now();
@@ -146,8 +176,7 @@ function parseXmltvDoc(xmlText: string): Record<string, EpgProgram[]> {
   const windowStart = now - 2 * 3600_000;
   const windowEnd   = now + 12 * 3600_000;
 
-  const progs = doc.querySelectorAll('programme');
-  for (const prog of progs) {
+  for (const prog of doc.querySelectorAll('programme')) {
     const tvgId = prog.getAttribute('channel');
     if (!tvgId) continue;
 
@@ -190,60 +219,96 @@ function parseXmltvDoc(xmlText: string): Record<string, EpgProgram[]> {
     );
   }
 
-  return programs;
+  return { programs, nameMap };
+}
+
+/** Internal: fetch + parse XMLTV, returning cached result when fresh */
+async function getXmltvData(xmltvUrl: string): Promise<{
+  programs: Record<string, EpgProgram[]>;
+  nameMap: Record<string, string>;
+} | null> {
+  const cached = xmltvCache.get(xmltvUrl);
+  if (cached && Date.now() - cached.parsedAt < XMLTV_TTL) {
+    return { programs: cached.programs, nameMap: cached.nameMap };
+  }
+
+  const proxyUrl = `/api/proxy?url=${encodeURIComponent(xmltvUrl)}`;
+  const empty = { programs: {}, nameMap: {} };
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 30_000);
+    const res = await fetch(proxyUrl, { signal: ctrl.signal });
+    clearTimeout(timer);
+    if (!res.ok) return null;
+
+    // Proxy converts upstream 404 → 200 + X-Upstream-Status:404
+    if (res.headers.get('X-Upstream-Status') === '404') {
+      xmltvCache.set(xmltvUrl, { ...empty, parsedAt: Date.now() - XMLTV_TTL + XMLTV_ERR_TTL });
+      return null;
+    }
+
+    const text = await res.text();
+    if (!text.trimStart().startsWith('<')) {
+      xmltvCache.set(xmltvUrl, { ...empty, parsedAt: Date.now() - XMLTV_TTL + XMLTV_ERR_TTL });
+      return null;
+    }
+
+    const parsed = parseXmltvDoc(text);
+    xmltvCache.set(xmltvUrl, { ...parsed, parsedAt: Date.now() });
+    return parsed;
+  } catch {
+    return null;
+  }
 }
 
 /**
- * Fetch and parse XMLTV EPG for given tvg-ids.
- * Used for M3U channels (via xmltvEpgUrl) and as fallback for Xtream channels (via /xmltv.php).
+ * Fetch XMLTV EPG for a list of tvg-ids (legacy / M3U usage).
+ * Returns programs keyed by tvgId.
  */
 export async function fetchXmltvEpg(
   xmltvUrl: string,
   tvgIds: string[],
 ): Promise<Record<string, EpgProgram[]>> {
   if (!tvgIds.length || !xmltvUrl) return {};
+  const data = await getXmltvData(xmltvUrl);
+  if (!data) return {};
+  const result: Record<string, EpgProgram[]> = {};
+  for (const id of tvgIds) if (data.programs[id]) result[id] = data.programs[id];
+  return result;
+}
 
-  // Cache hit
-  const cached = xmltvCache.get(xmltvUrl);
-  if (cached && Date.now() - cached.parsedAt < XMLTV_TTL) {
-    const result: Record<string, EpgProgram[]> = {};
-    for (const id of tvgIds) if (cached.programs[id]) result[id] = cached.programs[id];
-    return result;
-  }
+/**
+ * Fetch XMLTV EPG for full channel objects.
+ * Tries tvgId match first; falls back to normalized channel-name match
+ * (only against XMLTV channels with non-zero ids — avoids mixing shared id="0" programmes).
+ * Returns programs keyed by channel.id (store id), ready to store in epgSchedule.
+ */
+export async function fetchXmltvEpgForChannels(
+  xmltvUrl: string,
+  channels: Array<{ id: string; tvgId?: string; name: string }>,
+): Promise<Record<string, EpgProgram[]>> {
+  if (!channels.length || !xmltvUrl) return {};
+  const data = await getXmltvData(xmltvUrl);
+  if (!data) return {};
 
-  const proxyUrl = `/api/proxy?url=${encodeURIComponent(xmltvUrl)}`;
+  const result: Record<string, EpgProgram[]> = {};
+  for (const ch of channels) {
+    let progs: EpgProgram[] | undefined;
 
-  try {
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 30_000);
-    const res = await fetch(proxyUrl, { signal: ctrl.signal });
-    clearTimeout(timer);
-    if (!res.ok) return {};
+    // 1. ID match (fast, exact)
+    if (ch.tvgId && ch.tvgId !== '0') progs = data.programs[ch.tvgId];
 
-    // Proxy converts upstream 404 → 200 + X-Upstream-Status:404.
-    // Cache briefly so we don't hammer a non-existent XMLTV endpoint.
-    if (res.headers.get('X-Upstream-Status') === '404') {
-      xmltvCache.set(xmltvUrl, { programs: {}, parsedAt: Date.now() - XMLTV_TTL + XMLTV_ERR_TTL });
-      return {};
+    // 2. Normalized name fallback (only non-zero XMLTV ids, so no id="0" noise)
+    if (!progs && ch.name) {
+      const xmltvId = data.nameMap[normName(ch.name)];
+      if (xmltvId) progs = data.programs[xmltvId];
     }
 
-    const text = await res.text();
-
-    // Response is not XML — likely an error page or empty JSON from proxy
-    if (!text.trimStart().startsWith('<')) {
-      xmltvCache.set(xmltvUrl, { programs: {}, parsedAt: Date.now() - XMLTV_TTL + XMLTV_ERR_TTL });
-      return {};
+    if (progs?.length) {
+      result[ch.id] = progs.map(p => ({ ...p, channelId: ch.id }));
     }
-
-    const programs = parseXmltvDoc(text);
-    xmltvCache.set(xmltvUrl, { programs, parsedAt: Date.now() });
-
-    const result: Record<string, EpgProgram[]> = {};
-    for (const id of tvgIds) if (programs[id]) result[id] = programs[id];
-    return result;
-  } catch {
-    return {};
   }
+  return result;
 }
 
 /** Build the standard Xtream XMLTV feed URL */
