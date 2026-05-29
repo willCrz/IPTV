@@ -2,8 +2,6 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Inter+Tight:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
-
 /* ============================================================
    OPTMUS+ — Design Tokens
    Dark-mode primary. Cinematic. Built on a 4px grid.
@@ -886,5 +884,44 @@ html.tv-mode button:focus {
 html.tv-mode [style*="overflowX: auto"],
 html.tv-mode [style*="overflow-x: auto"] {
   scroll-snap-type: x mandatory;
-  scroll-behavior: smooth;
+  /* scroll-behavior: smooth removed — too expensive on low-end TV hardware */
+}
+
+/* ============================================================
+   TV PERFORMANCE — remove GPU-heavy effects that freeze Smart TV WebViews
+   ============================================================ */
+
+/* backdrop-filter (blur) causes full software-render fallback on most TV WebViews */
+html.tv-mode .lk-topbar {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  background: rgba(10, 11, 15, 0.98) !important;
+}
+html.tv-mode .lk-modal-scrim {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+html.tv-mode .lk-btn--secondary {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  background: rgba(255, 255, 255, 0.14) !important;
+}
+
+/* Stop the live-pulse animation — multiplied by every visible channel tile */
+html.tv-mode .lk-live-dot {
+  animation: none !important;
+  opacity: 1;
+}
+
+/* Disable CSS transitions on TV — React state updates already batch-paint,
+   transitions just add extra compositor work on low-end GPU */
+html.tv-mode .lk-channel,
+html.tv-mode .lk-poster .img,
+html.tv-mode .lk-back .img,
+html.tv-mode .lk-chip,
+html.tv-mode .lk-btn,
+html.tv-mode .lk-icon-btn,
+html.tv-mode .lk-sidebar nav a,
+html.tv-mode .lk-sidebar nav button.nav-item {
+  transition: none !important;
 }

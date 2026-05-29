@@ -1,7 +1,7 @@
 'use client';
 import {
   useState, useEffect, useMemo, memo, useCallback,
-  Suspense, lazy, useRef,
+  Suspense, lazy, useRef, startTransition,
 } from 'react';
 import {
   Search, Play, Star, Tv, Film, Layers,
@@ -48,10 +48,12 @@ const FullPlayerComp = lazy(() =>
   import('@/components/player/FullPlayer').then(m => ({ default: m.FullPlayer }))
 );
 
-// Pre-warm: kick off the FullPlayer bundle fetch immediately so it's ready
-// before the user clicks Assistir — eliminates the 1-3s lazy-load freeze.
+// Pre-warm: defer until idle so it doesn't compete with the initial render.
+// requestIdleCallback is supported in modern TV WebViews; fallback to 3s timeout.
 if (typeof window !== 'undefined') {
-  import('@/components/player/FullPlayer').catch(() => {});
+  const schedule = (window as Window & { requestIdleCallback?: (cb: () => void) => void }).requestIdleCallback
+    ?? ((cb: () => void) => setTimeout(cb, 3000));
+  schedule(() => { import('@/components/player/FullPlayer').catch(() => {}); });
 }
 
 // ── Input com label ───────────────────────────────────────────
@@ -1374,7 +1376,11 @@ export default function Dashboard() {
       }
 
       if (cacheLive.length > 0 || cacheMovies.length > 0) {
-        store.setAllChannels(dedup(cacheLive), dedup(cacheMovies), dedup(cacheSeries));
+        // startTransition: large channel arrays (5000+ items) block the render thread;
+        // marking as non-urgent lets React yield to user interactions mid-update.
+        startTransition(() => {
+          store.setAllChannels(dedup(cacheLive), dedup(cacheMovies), dedup(cacheSeries));
+        });
         if (needFetch.length === 0) return;
       }
 
@@ -1406,7 +1412,7 @@ export default function Dashboard() {
         const allLive   = dedup([...cacheLive,   ...fetchedLive]);
         const allMovies = dedup([...cacheMovies, ...fetchedMovies]);
         const allSeries = dedup([...cacheSeries, ...fetchedSeries]);
-        store.setAllChannels(allLive, allMovies, allSeries);
+        startTransition(() => { store.setAllChannels(allLive, allMovies, allSeries); });
       } finally { setAutoLoading(false); }
     };
     run();
@@ -1464,7 +1470,7 @@ export default function Dashboard() {
         allSeries.push(...sch);
       }));
 
-      store.setAllChannels(dedup(allLive), dedup(allMovies), dedup(allSeries));
+      startTransition(() => { store.setAllChannels(dedup(allLive), dedup(allMovies), dedup(allSeries)); });
       setActiveTab('live');
     } catch (e) {
       setAutoLoadMsg((e instanceof Error ? e.message : 'Erro ao sincronizar') + ' — verifique a conexão.');
