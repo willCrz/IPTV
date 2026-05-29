@@ -1243,6 +1243,7 @@ function GuideScreen({ channels, epgNow, epgSchedule, epgLoading, currentChannel
             epgLoading={epgLoading}
             currentChannel={currentChannel}
             onPlay={onPlay}
+            onLoadVisibleEpg={onLoadVisibleEpg}
           />
         )}
       </div>

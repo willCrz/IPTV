@@ -3,6 +3,8 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import type { Channel, EpgProgram } from '@/store';
 
+const SCROLL_DEBOUNCE_MS = 300;
+
 const CH_COL   = 200;
 const CH_H     = 72;
 const PX_MIN   = 4;
@@ -20,11 +22,12 @@ interface Props {
   epgLoading: Record<string, boolean>;
   currentChannel?: Channel | null;
   onPlay: (ch: Channel) => void;
+  onLoadVisibleEpg?: (chs: Channel[]) => void;
 }
 
 const ROW_OVERSCAN = 4;
 
-export default function EpgGrid({ channels, epgSchedule, epgLoading, currentChannel, onPlay }: Props) {
+export default function EpgGrid({ channels, epgSchedule, epgLoading, currentChannel, onPlay, onLoadVisibleEpg }: Props) {
   const hdrRef  = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const colRef  = useRef<HTMLDivElement>(null);
@@ -33,6 +36,13 @@ export default function EpgGrid({ channels, epgSchedule, epgLoading, currentChan
   // Virtual scroll state
   const [scrollTopY, setScrollTopY] = useState(0);
   const [viewH, setViewH] = useState(600);
+
+  // Refs so the scroll effect can read current EPG state without stale closures
+  const epgScheduleRef = useRef(epgSchedule);
+  const epgLoadingRef  = useRef(epgLoading);
+  useEffect(() => { epgScheduleRef.current = epgSchedule; }, [epgSchedule]);
+  useEffect(() => { epgLoadingRef.current  = epgLoading;  }, [epgLoading]);
+  const loadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Measure body container height
   useEffect(() => {
@@ -47,6 +57,21 @@ export default function EpgGrid({ channels, epgSchedule, epgLoading, currentChan
   // Visible row range
   const rowStart = Math.max(0, Math.floor(scrollTopY / CH_H) - ROW_OVERSCAN);
   const rowEnd   = Math.min(channels.length - 1, Math.ceil((scrollTopY + viewH) / CH_H) + ROW_OVERSCAN);
+
+  // Load EPG for newly visible channels (debounced so rapid scrolling batches into one call)
+  useEffect(() => {
+    if (!onLoadVisibleEpg) return;
+    if (loadTimerRef.current) clearTimeout(loadTimerRef.current);
+    loadTimerRef.current = setTimeout(() => {
+      const visible = channels.slice(rowStart, rowEnd + 1);
+      const needsEpg = visible.filter(ch =>
+        epgScheduleRef.current[ch.id] === undefined && !epgLoadingRef.current[ch.id]
+      );
+      if (needsEpg.length > 0) onLoadVisibleEpg(needsEpg);
+    }, SCROLL_DEBOUNCE_MS);
+    return () => { if (loadTimerRef.current) clearTimeout(loadTimerRef.current); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rowStart, rowEnd, channels, onLoadVisibleEpg]);
 
   const now      = Date.now();
   const startMs  = now - BEFORE * 60_000;
