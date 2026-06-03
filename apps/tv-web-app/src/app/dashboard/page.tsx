@@ -410,7 +410,6 @@ const InlinePlayer = memo(function InlinePlayer() {
           position: 'absolute', bottom: 0, left: 0, right: 0,
           padding: '32px 18px 14px',
           background: 'linear-gradient(to top,rgba(0,0,0,0.85),transparent)',
-          backdropFilter: 'blur(4px)',
           opacity: hov ? 1 : 0,
           pointerEvents: hov ? 'auto' : 'none',
           transition: 'opacity 200ms',
@@ -916,6 +915,15 @@ function LiveTVScreen({ channels, cats, activeCategory, searchQuery, epgNow, epg
   const chipsRef = useRef<HTMLDivElement>(null);
   const [scrollTopCh, setScrollTopCh] = useState(0);
   const [listH, setListH] = useState(700);
+  const [chipsCanScrollLeft,  setChipsCanScrollLeft]  = useState(false);
+  const [chipsCanScrollRight, setChipsCanScrollRight] = useState(false);
+
+  const updateChipsArrows = useCallback(() => {
+    const el = chipsRef.current;
+    if (!el) return;
+    setChipsCanScrollLeft(el.scrollLeft > 2);
+    setChipsCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 2);
+  }, []);
 
   useEffect(() => {
     const el = listRef.current;
@@ -935,8 +943,16 @@ function LiveTVScreen({ channels, cats, activeCategory, searchQuery, epgNow, epg
       el.scrollLeft += e.deltaY;
     };
     el.addEventListener('wheel', onWheel, { passive: false });
-    return () => el.removeEventListener('wheel', onWheel);
-  }, []);
+    el.addEventListener('scroll', updateChipsArrows);
+    const ro = new ResizeObserver(updateChipsArrows);
+    ro.observe(el);
+    updateChipsArrows();
+    return () => {
+      el.removeEventListener('wheel', onWheel);
+      el.removeEventListener('scroll', updateChipsArrows);
+      ro.disconnect();
+    };
+  }, [updateChipsArrows]);
 
   // Filtro local de canal por nome (campo de busca interno)
   const displayChannels = useMemo(() => {
@@ -1026,15 +1042,47 @@ function LiveTVScreen({ channels, cats, activeCategory, searchQuery, epgNow, epg
         </div>
 
         {/* Chips de categoria — scroll horizontal */}
-        <div ref={chipsRef} style={{ overflowX: 'auto', flexShrink: 0, paddingBottom: 8 }} className="scrollbar-hide">
-          <div style={{ display: 'flex', gap: 6, padding: '0 10px', minWidth: 'max-content' }}>
-            <button onClick={() => onCategoryChange(null)} style={chipStyle(!activeCategory)}>Todos</button>
-            {cats.map(cat => (
-              <button key={cat.name} onClick={() => onCategoryChange(cat.name)} style={chipStyle(activeCategory === cat.name)}>
-                {cat.name}
-              </button>
-            ))}
+        <div style={{ position: 'relative', flexShrink: 0, paddingBottom: 8 }}>
+          {chipsCanScrollLeft && (
+            <button
+              onClick={() => { if (chipsRef.current) chipsRef.current.scrollLeft -= 200; }}
+              style={{
+                position: 'absolute', left: 0, top: 0, bottom: 8, zIndex: 2,
+                width: 28, border: 'none', cursor: 'pointer',
+                background: 'linear-gradient(to right, var(--bg-2) 60%, transparent)',
+                color: 'var(--fg-2)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                padding: 0,
+              }}
+              aria-label="Rolar categorias para a esquerda"
+            >
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M9 2L5 7l4 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </button>
+          )}
+          <div ref={chipsRef} style={{ overflowX: 'auto', scrollBehavior: 'smooth' }} className="scrollbar-hide">
+            <div style={{ display: 'flex', gap: 6, padding: '0 10px', minWidth: 'max-content' }}>
+              <button onClick={() => onCategoryChange(null)} style={chipStyle(!activeCategory)}>Todos</button>
+              {cats.map(cat => (
+                <button key={cat.name} onClick={() => onCategoryChange(cat.name)} style={chipStyle(activeCategory === cat.name)}>
+                  {cat.name}
+                </button>
+              ))}
+            </div>
           </div>
+          {chipsCanScrollRight && (
+            <button
+              onClick={() => { if (chipsRef.current) chipsRef.current.scrollLeft += 200; }}
+              style={{
+                position: 'absolute', right: 0, top: 0, bottom: 8, zIndex: 2,
+                width: 28, border: 'none', cursor: 'pointer',
+                background: 'linear-gradient(to left, var(--bg-2) 60%, transparent)',
+                color: 'var(--fg-2)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                padding: 0,
+              }}
+              aria-label="Rolar categorias para a direita"
+            >
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M5 2l4 5-4 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </button>
+          )}
         </div>
 
         <div style={{ height: 1, background: 'var(--line-1)', flexShrink: 0 }}/>

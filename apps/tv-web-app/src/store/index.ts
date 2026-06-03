@@ -392,6 +392,7 @@ export const useStore = create<Store>()(
       // Recomputes epgNow from the already-loaded epgSchedule — no network request needed.
       // Called on mount and every 60 s so "AGORA" highlights stay accurate as time passes.
       // Also prunes programs that ended more than 2 h ago to prevent memory growth.
+      // Single-pass: 2 Date objects per program instead of 4.
       loadEpgNow: async () => {
         const { epgSchedule } = get();
         const now = Date.now();
@@ -400,14 +401,23 @@ export const useStore = create<Store>()(
         const pruned: Record<string, EpgProgram[]> = {};
         let didPrune = false;
         for (const [chId, progs] of Object.entries(epgSchedule)) {
-          const kept = progs.filter(p => new Date(p.endTime).getTime() > cutoff);
-          if (kept.length !== progs.length) { pruned[chId] = kept; didPrune = true; }
-          const current = kept.find(p => {
-            const s = new Date(p.startTime).getTime();
-            const e = new Date(p.endTime).getTime();
-            return s <= now && e > now;
-          });
-          if (current) map[chId] = { ...current, isNow: true, progress: Math.round((now - new Date(current.startTime).getTime()) / (new Date(current.endTime).getTime() - new Date(current.startTime).getTime()) * 100) };
+          const kept: EpgProgram[] = [];
+          let current: { prog: EpgProgram; startMs: number; endMs: number } | undefined;
+          for (const p of progs) {
+            const startMs = new Date(p.startTime).getTime();
+            const endMs   = new Date(p.endTime).getTime();
+            if (endMs <= cutoff) { didPrune = true; continue; }
+            kept.push(p);
+            if (!current && startMs <= now && endMs > now) current = { prog: p, startMs, endMs };
+          }
+          if (kept.length !== progs.length) pruned[chId] = kept;
+          if (current) {
+            map[chId] = {
+              ...current.prog,
+              isNow: true,
+              progress: Math.round((now - current.startMs) / (current.endMs - current.startMs) * 100),
+            };
+          }
         }
         if (didPrune) set({ epgNow: map, epgSchedule: { ...epgSchedule, ...pruned } });
         else set({ epgNow: map });
@@ -561,10 +571,14 @@ export const useStore = create<Store>()(
         token:s.token, user:s.user, isAuthenticated:s.isAuthenticated,
         playlists:s.playlists, favorites:s.favorites,
         history:s.history, activeTab:s.activeTab,
-        // EPG persisted so the user sees "now playing" instantly on next open
-        // and loadVisibleEpg skips already-loaded channels (re-fetches only stale ones)
+        // EPG persisted so the user sees "now playing" instantly on next open.
+        // Cap at 200 channels to prevent localStorage from growing too large.
         epgNow: s.epgNow,
-        epgSchedule: s.epgSchedule,
+        epgSchedule: (() => {
+          const entries = Object.entries(s.epgSchedule).filter(([, p]) => p.length > 0);
+          if (entries.length <= 200) return s.epgSchedule;
+          return Object.fromEntries(entries.slice(entries.length - 200));
+        })(),
       }),
     }
   )

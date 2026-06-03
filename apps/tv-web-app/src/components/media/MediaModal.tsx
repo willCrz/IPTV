@@ -283,7 +283,7 @@ export const MediaModal = memo(function MediaModal({ item, allItems = [], onClos
 
   return (
     <div
-      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.88)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 55, padding: 16, backdropFilter: 'blur(8px)' }}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.92)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 55, padding: 16 }}
       onClick={e => e.target === e.currentTarget && onClose()}
     >
       <div ref={modalRef} style={{ background: '#111118', border: '1px solid rgba(255,255,255,0.09)', borderRadius: 20, width: '100%', maxWidth: 900, maxHeight: '92vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 40px 120px rgba(0,0,0,0.95)' }}>

@@ -240,7 +240,7 @@ export async function parseM3UFromUrl(url: string, playlistKey = 'm3u'): Promise
   const text = await res.text();
   if (!text.includes('#EXTM3U') && !text.includes('#EXTINF'))
     throw new Error('Arquivo não parece ser uma lista M3U válida.');
-  const result = parseM3UText(text, playlistKey);
+  const result = await parseM3UText(text, playlistKey);
   // If no url-tvg was found in the M3U header, auto-detect from Xtream-format URL.
   if (!result.tvgUrl) result.tvgUrl = detectXtreamXmltvFromM3uUrl(url);
   return result;
@@ -260,7 +260,8 @@ function detectXtreamXmltvFromM3uUrl(m3uUrl: string): string | undefined {
   return undefined;
 }
 
-export function parseM3UText(text: string, playlistKey = 'm3u'): M3UResult {
+// Async version that yields the main thread every 500 channels to prevent UI freeze.
+export async function parseM3UText(text: string, playlistKey = 'm3u'): Promise<M3UResult> {
   const lines = text.split(/\r?\n/);
   const channels: Channel[] = [];
 
@@ -272,6 +273,11 @@ export function parseM3UText(text: string, playlistKey = 'm3u'): M3UResult {
   }
 
   for (let i = 0; i < lines.length; i++) {
+    // Yield every 500 parsed channels so the main thread can process UI events
+    if (channels.length > 0 && channels.length % 500 === 0) {
+      await new Promise<void>(r => setTimeout(r, 0));
+    }
+
     const line = lines[i].trim();
     if (!line.startsWith('#EXTINF:')) continue;
 

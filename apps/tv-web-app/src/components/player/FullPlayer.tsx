@@ -52,7 +52,7 @@ function SidePanel({ open, onClose, title, sub, children, width=420 }:{
   open:boolean; onClose:()=>void; title:string; sub?:string; children:React.ReactNode; width?:number;
 }) {
   return (
-    <div style={{ position:'absolute', right:0, top:0, bottom:0, width, background:C.surface, backdropFilter:'blur(24px)', borderLeft:`1px solid ${C.border}`, display:'flex', flexDirection:'column', transform:open?'translateX(0)':'translateX(100%)', transition:'transform 0.3s cubic-bezier(0.4,0,0.2,1)', zIndex:20 }}>
+    <div style={{ position:'absolute', right:0, top:0, bottom:0, width, background:C.surface, borderLeft:`1px solid ${C.border}`, display:'flex', flexDirection:'column', transform:open?'translateX(0)':'translateX(100%)', transition:'transform 0.3s cubic-bezier(0.4,0,0.2,1)', zIndex:20 }}>
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'18px 22px', borderBottom:`1px solid ${C.border}`, flexShrink:0 }}>
         <div><p style={{ color:C.text, fontWeight:700, fontSize:17 }}>{title}</p>{sub&&<p style={{ color:C.dim, fontSize:12, marginTop:3 }}>{sub}</p>}</div>
         <button onClick={onClose} style={{ background:'rgba(255,255,255,0.07)', border:`1px solid ${C.border}`, borderRadius:8, width:30, height:30, color:C.muted, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18 }}>×</button>
@@ -141,7 +141,7 @@ const ChannelsPanel = memo(function ChannelsPanel({ open, onClose, onSelect, cur
 
   return (
     <SidePanel open={open} onClose={onClose} title={tabLabel} sub={`${content.itemsTotal||content.total} disponíveis`} width={450}>
-      <div style={{ position:'sticky', top:0, background:C.surface, borderBottom:`1px solid ${C.border}`, padding:'12px 18px', zIndex:5, backdropFilter:'blur(16px)' }}>
+      <div style={{ position:'sticky', top:0, background:C.surface, borderBottom:`1px solid ${C.border}`, padding:'12px 18px', zIndex:5 }}>
         <div style={{ position:'relative', marginBottom:8 }}>
           <span style={{ position:'absolute', left:9, top:'50%', transform:'translateY(-50%)', color:C.dim }}><ISearch/></span>
           <input type="text" placeholder={`Buscar ${tabLabel.toLowerCase()}...`} value={q} onChange={e=>setQ(e.target.value)}
@@ -396,8 +396,8 @@ export function FullPlayer() {
   if (!currentChannel) return null;
 
   const S:React.CSSProperties = { transition:'opacity 0.3s, transform 0.3s', opacity:showUI?1:0, pointerEvents:showUI?'auto':'none' };
-  const btn:React.CSSProperties = { display:'flex', alignItems:'center', justifyContent:'center', gap:6, padding:'8px 14px', borderRadius:10, borderWidth:'1px', borderStyle:'solid', borderColor:C.border, background:'rgba(255,255,255,0.08)', color:'rgba(255,255,255,0.8)', cursor:'pointer', fontSize:13, fontWeight:500, transition:'all 0.15s', backdropFilter:'blur(8px)' };
-  const iBtn:React.CSSProperties = { width:42, height:42, borderRadius:10, borderWidth:'1px', borderStyle:'solid', borderColor:C.border, background:'rgba(255,255,255,0.08)', color:'rgba(255,255,255,0.8)', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', transition:'all 0.15s', backdropFilter:'blur(8px)' };
+  const btn:React.CSSProperties = { display:'flex', alignItems:'center', justifyContent:'center', gap:6, padding:'8px 14px', borderRadius:10, borderWidth:'1px', borderStyle:'solid', borderColor:C.border, background:'rgba(255,255,255,0.1)', color:'rgba(255,255,255,0.8)', cursor:'pointer', fontSize:13, fontWeight:500, transition:'all 0.15s' };
+  const iBtn:React.CSSProperties = { width:42, height:42, borderRadius:10, borderWidth:'1px', borderStyle:'solid', borderColor:C.border, background:'rgba(255,255,255,0.1)', color:'rgba(255,255,255,0.8)', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', transition:'all 0.15s' };
 
   return (
     <div style={{ position:'fixed', inset:0, background:'#000', zIndex:200 }} onMouseMove={resetHide} onKeyDown={resetHide} onClick={()=>!showUI&&resetHide()}>

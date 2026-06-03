@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useCallback, useState } from 'react';
+import { useEffect, useRef, useCallback, useState, useMemo } from 'react';
 import type { Channel, EpgProgram } from '@/store';
 
 const SCROLL_DEBOUNCE_MS = 300;
@@ -73,16 +73,24 @@ export default function EpgGrid({ channels, epgSchedule, epgLoading, currentChan
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rowStart, rowEnd, channels, onLoadVisibleEpg]);
 
-  const now      = Date.now();
-  const startMs  = now - BEFORE * 60_000;
-  const endMs    = now + AFTER  * 60_000;
+  // Stable epoch per mount — prevents slot recalculation on every scroll render.
+  // A 60-second interval updates only the live "now" line position.
+  const mountEpoch = useRef(Date.now()).current;
+  const startMs  = mountEpoch - BEFORE * 60_000;
+  const endMs    = mountEpoch + AFTER  * 60_000;
   const totalMin = BEFORE + AFTER;
   const totalW   = totalMin * PX_MIN;
+
+  const [liveNow, setLiveNow] = useState(mountEpoch);
+  useEffect(() => {
+    const id = setInterval(() => setLiveNow(Date.now()), 60_000);
+    return () => clearInterval(id);
+  }, []);
 
   const minToX = useCallback((ms: number) =>
     Math.round((ms - startMs) / 60_000 * PX_MIN), [startMs]);
 
-  const nowX = minToX(now);
+  const nowX = Math.round((liveNow - startMs) / 60_000 * PX_MIN);
 
   useEffect(() => {
     if (!bodyRef.current) return;
@@ -125,17 +133,18 @@ export default function EpgGrid({ channels, epgSchedule, epgLoading, currentChan
     });
   }, []);
 
-  // Build 30-min header slots
-  const slots: Date[] = [];
-  {
+  // Build 30-min header slots — memoized: startMs/endMs are stable per mount.
+  const slots = useMemo((): Date[] => {
+    const result: Date[] = [];
     const slotStart = new Date(startMs);
     slotStart.setSeconds(0, 0);
     const rem = slotStart.getMinutes() % SLOT_MIN;
     if (rem) slotStart.setMinutes(slotStart.getMinutes() + (SLOT_MIN - rem));
     for (let d = new Date(slotStart); d.getTime() < endMs; d = new Date(d.getTime() + SLOT_MIN * 60_000)) {
-      slots.push(new Date(d));
+      result.push(new Date(d));
     }
-  }
+    return result;
+  }, [startMs, endMs]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden', background: '#0f0f0f' }}>

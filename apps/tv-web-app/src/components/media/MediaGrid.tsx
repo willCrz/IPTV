@@ -101,11 +101,11 @@ function HeroSection({ item, onPlay, onDetail, onFav, isFav }: {
             <Play size={16} fill="#0A0B0F" /> Assistir agora
           </button>
           <button onClick={() => onFav(item.id)}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, background: isFav ? 'rgba(251,191,36,0.18)' : 'rgba(255,255,255,0.1)', color: isFav ? '#fbbf24' : '#fff', borderWidth: '1px', borderStyle: 'solid', borderColor: isFav ? '#fbbf24' : 'rgba(255,255,255,0.2)', borderRadius: 10, padding: '11px 18px', fontWeight: 600, fontSize: 14, cursor: 'pointer', fontFamily: 'var(--font-sans)', backdropFilter: 'blur(8px)' }}>
+            style={{ display: 'flex', alignItems: 'center', gap: 8, background: isFav ? 'rgba(251,191,36,0.18)' : 'rgba(255,255,255,0.12)', color: isFav ? '#fbbf24' : '#fff', borderWidth: '1px', borderStyle: 'solid', borderColor: isFav ? '#fbbf24' : 'rgba(255,255,255,0.2)', borderRadius: 10, padding: '11px 18px', fontWeight: 600, fontSize: 14, cursor: 'pointer', fontFamily: 'var(--font-sans)' }}>
             <Plus size={15} /> {isFav ? 'Na minha lista' : 'Minha lista'}
           </button>
           <button onClick={() => onDetail(item)}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.75)', borderWidth: '1px', borderStyle: 'solid', borderColor: 'rgba(255,255,255,0.14)', borderRadius: 10, padding: '11px 18px', fontWeight: 600, fontSize: 14, cursor: 'pointer', fontFamily: 'var(--font-sans)', backdropFilter: 'blur(8px)' }}>
+            style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.75)', borderWidth: '1px', borderStyle: 'solid', borderColor: 'rgba(255,255,255,0.14)', borderRadius: 10, padding: '11px 18px', fontWeight: 600, fontSize: 14, cursor: 'pointer', fontFamily: 'var(--font-sans)' }}>
             <Info size={15} /> Mais informações
           </button>
         </div>
@@ -267,7 +267,7 @@ const PosterCard = memo(function PosterCard({ ch, isFav, isCurrent, onPlay, onFa
           </div>
         )}
         {ch.rating && (
-          <div style={{ position: 'absolute', top: 8, left: 8, background: 'rgba(0,0,0,0.82)', color: '#fbbf24', fontSize: 10, fontWeight: 700, padding: '3px 7px', borderRadius: 5, display: 'flex', alignItems: 'center', gap: 3, backdropFilter: 'blur(4px)' }}>
+          <div style={{ position: 'absolute', top: 8, left: 8, background: 'rgba(0,0,0,0.85)', color: '#fbbf24', fontSize: 10, fontWeight: 700, padding: '3px 7px', borderRadius: 5, display: 'flex', alignItems: 'center', gap: 3 }}>
             <Star size={9} fill="#fbbf24" />{ch.rating}
           </div>
         )}
@@ -279,7 +279,7 @@ const PosterCard = memo(function PosterCard({ ch, isFav, isCurrent, onPlay, onFa
                 <Play size={13} fill="#000" /> Assistir
               </button>
               <button onClick={e => { e.stopPropagation(); onDetail(ch); }}
-                style={{ width: 36, height: 36, background: 'rgba(255,255,255,0.14)', borderWidth: '1px', borderStyle: 'solid', borderColor: 'rgba(255,255,255,0.3)', color: '#fff', borderRadius: 8, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(4px)', flexShrink: 0 }}>
+                style={{ width: 36, height: 36, background: 'rgba(255,255,255,0.18)', borderWidth: '1px', borderStyle: 'solid', borderColor: 'rgba(255,255,255,0.3)', color: '#fff', borderRadius: 8, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                 <Info size={13} />
               </button>
             </div>

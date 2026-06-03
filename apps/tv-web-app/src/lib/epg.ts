@@ -143,8 +143,19 @@ const xmltvCache = new Map<string, {
   nameMap: Record<string, string>;
   parsedAt: number;
 }>();
-const XMLTV_TTL     = 20 * 60_000; // 20 minutes for valid data
-const XMLTV_ERR_TTL =  5 * 60_000; // 5 minutes before retrying a failed URL
+const XMLTV_TTL      = 60 * 60_000; // 60 minutes — XMLTV data changes rarely
+const XMLTV_ERR_TTL  =  5 * 60_000; // 5 minutes before retrying a failed URL
+const XMLTV_MAX_CACHE = 3;           // keep at most 3 parsed documents in memory
+
+function evictOldestXmltvEntry() {
+  if (xmltvCache.size <= XMLTV_MAX_CACHE) return;
+  let oldestKey = '';
+  let oldestTs = Infinity;
+  for (const [k, v] of xmltvCache.entries()) {
+    if (v.parsedAt < oldestTs) { oldestTs = v.parsedAt; oldestKey = k; }
+  }
+  if (oldestKey) xmltvCache.delete(oldestKey);
+}
 
 /** Parse a full XMLTV document; returns programs by channel-id and a name→id map */
 function parseXmltvDoc(xmlText: string): {
@@ -213,10 +224,9 @@ function parseXmltvDoc(xmlText: string): {
     programs[tvgId].push(program);
   }
 
+  // ISO-8601 strings sort correctly with plain string comparison — no Date parsing needed.
   for (const tvgId in programs) {
-    programs[tvgId].sort((a, b) =>
-      new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
-    );
+    programs[tvgId].sort((a, b) => (a.startTime < b.startTime ? -1 : a.startTime > b.startTime ? 1 : 0));
   }
 
   return { programs, nameMap };
@@ -244,17 +254,22 @@ async function getXmltvData(xmltvUrl: string): Promise<{
     // Proxy converts upstream 404 → 200 + X-Upstream-Status:404
     if (res.headers.get('X-Upstream-Status') === '404') {
       xmltvCache.set(xmltvUrl, { ...empty, parsedAt: Date.now() - XMLTV_TTL + XMLTV_ERR_TTL });
+      evictOldestXmltvEntry();
       return null;
     }
 
     const text = await res.text();
     if (!text.trimStart().startsWith('<')) {
       xmltvCache.set(xmltvUrl, { ...empty, parsedAt: Date.now() - XMLTV_TTL + XMLTV_ERR_TTL });
+      evictOldestXmltvEntry();
       return null;
     }
 
+    // Yield before the synchronous DOMParser call to keep the event loop responsive
+    await new Promise<void>(r => setTimeout(r, 0));
     const parsed = parseXmltvDoc(text);
     xmltvCache.set(xmltvUrl, { ...parsed, parsedAt: Date.now() });
+    evictOldestXmltvEntry();
     return parsed;
   } catch {
     return null;
