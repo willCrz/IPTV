@@ -1476,9 +1476,15 @@ export default function Dashboard() {
     } else if (ch.contentType === 'movie' || ch.contentType === 'series') {
       playMedia(ch);
     } else {
-      setCurrentChannel(ch);
+      // Live channel: open full player when coming from favorites/history
+      // (no inline player exists there). On the live tab, play inline as usual.
+      if (activeTab === 'favorites' || activeTab === 'history') {
+        playMedia(ch);
+      } else {
+        setCurrentChannel(ch);
+      }
     }
-  }, [setCurrentChannel, playMedia, addHistory, setMediaDetail]);
+  }, [activeTab, setCurrentChannel, playMedia, addHistory, setMediaDetail]);
 
   const handleSyncPlaylist = useCallback(async (targetPlaylist: Playlist) => {
     setSyncingId(targetPlaylist.id);
