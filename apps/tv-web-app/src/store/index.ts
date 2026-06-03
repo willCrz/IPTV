@@ -571,6 +571,8 @@ export const useStore = create<Store>()(
         token:s.token, user:s.user, isAuthenticated:s.isAuthenticated,
         playlists:s.playlists, favorites:s.favorites,
         history:s.history, activeTab:s.activeTab,
+        // Persist counts so settings page shows correct numbers even before channels load.
+        counts: s.counts,
         // EPG persisted so the user sees "now playing" instantly on next open.
         // Cap at 200 channels to prevent localStorage from growing too large.
         epgNow: s.epgNow,

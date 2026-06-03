@@ -32,7 +32,8 @@ function detectAudio(name: string): 'dub' | 'leg' | 'orig' {
   return 'orig';
 }
 
-function baseName(name: string): string {
+function baseName(name: string | null | undefined): string {
+  if (!name) return '';
   return name
     .replace(/\s*[-–|]?\s*(dublado|dub|legendado|leg|sub|nacional|pt\.?br|ptbr)\s*$/i, '')
     .replace(/\s*\((dublado|dub|legendado|leg)\)\s*$/i, '')

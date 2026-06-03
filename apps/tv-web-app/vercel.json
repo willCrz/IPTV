@@ -2,5 +2,8 @@
   "installCommand": "cd ../.. && pnpm install --no-frozen-lockfile",
   "buildCommand": "pnpm run build",
   "outputDirectory": ".next",
-  "framework": "nextjs"
+  "framework": "nextjs",
+  "env": {
+    "NEXT_PUBLIC_TMDB_KEY": "1d60cfaec44af81d57f2ffcc61c73fb8"
+  }
 }

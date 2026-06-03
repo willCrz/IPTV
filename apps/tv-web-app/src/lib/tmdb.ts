@@ -47,7 +47,8 @@ function url(path: string, params: Record<string, string>, k: string): string {
 }
 
 /** Strip common IPTV noise from a title before sending to TMDB */
-export function cleanTitle(name: string): string {
+export function cleanTitle(name: string | null | undefined): string {
+  if (!name) return '';
   return name
     .replace(/\s*[\[(](dub|dublado|leg|legendado|sub|HD|FHD|4K|UHD|SDR|HDR|HEVC|x265|x264|BluRay|WEB-?DL|TS|CAM|Nacional|PT-?BR|PTBR)[\])]/gi, '')
     .replace(/\s*\(\d{4}\)\s*$/, '')

@@ -127,7 +127,8 @@ export async function fetchXtreamBatchEpg(
 // ── XMLTV EPG ────────────────────────────────────────────────
 
 /** Normalize a channel name for fuzzy matching (strip quality/variant tags) */
-function normName(n: string): string {
+function normName(n: string | null | undefined): string {
+  if (!n) return '';
   return n.toLowerCase()
     .replace(/\s*[\[(](uhd|4k|fhd|hd|sd|h\.?265|h265|alt\d*|alt|backup)[)\]]/gi, '')
     .replace(/\s+(uhd|4k|fhd|hd|sd)(\s|$)/gi, ' ')
