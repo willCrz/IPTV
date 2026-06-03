@@ -130,7 +130,7 @@ const ChannelsPanel = memo(function ChannelsPanel({ open, onClose, onSelect, cur
   const content = activeTab === 'movies' ? movies : activeTab === 'series' ? series : live;
   const allItems = content.items || [];
   const filtered = q
-    ? allItems.filter(c=>c.name.toLowerCase().includes(q.toLowerCase()))
+    ? allItems.filter(c=>(c.name||'').toLowerCase().includes(q.toLowerCase()))
     : (activeCategory
         ? allItems.filter(c=>c.groupTitle===activeCategory)
         : allItems);

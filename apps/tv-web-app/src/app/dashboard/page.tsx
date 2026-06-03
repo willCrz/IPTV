@@ -958,7 +958,7 @@ function LiveTVScreen({ channels, cats, activeCategory, searchQuery, epgNow, epg
   const displayChannels = useMemo(() => {
     if (!catSearch) return channels;
     const q = catSearch.toLowerCase();
-    return channels.filter(ch => ch.name.toLowerCase().includes(q));
+    return channels.filter(ch => (ch.name || '').toLowerCase().includes(q));
   }, [channels, catSearch]);
 
   const chStart = Math.max(0, Math.floor(scrollTopCh / ITEM_H) - CH_OVERSCAN);
@@ -1539,7 +1539,7 @@ export default function Dashboard() {
     let result = !activeCategory ? base : base.filter(ch => ch.groupTitle === activeCategory);
     if (searchQuery && searchQuery.length >= 2) {
       const q = searchQuery.toLowerCase();
-      result = result.filter(ch => ch.name.toLowerCase().includes(q));
+      result = result.filter(ch => (ch.name || '').toLowerCase().includes(q));
     }
     return result;
   }, [activeTab, movies.items, series.items, activeCategory, searchQuery]);
@@ -1550,7 +1550,7 @@ export default function Dashboard() {
     const items = currentContent.items;
     if (searchQuery && searchQuery.length >= 2) {
       const q = searchQuery.toLowerCase();
-      return items.filter(ch => ch.name.toLowerCase().includes(q));
+      return items.filter(ch => (ch.name || '').toLowerCase().includes(q));
     }
     // Filtro local por categoria para live TV (funciona mesmo sem backend)
     if (activeTab === 'live' && activeCategory) {

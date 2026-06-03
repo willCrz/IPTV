@@ -333,7 +333,7 @@ export function MediaGrid({ items, cats, favorites, currentId, total, itemsTotal
       if (!existing) {
         seen.set(key, ch);
       } else {
-        const isDub = /(dub|dublado|nacional|pt.?br)/i.test(ch.name);
+        const isDub = /(dub|dublado|nacional|pt.?br)/i.test(ch.name || '');
         if (isDub) seen.set(key, ch);
       }
     }
