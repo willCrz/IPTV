@@ -543,7 +543,7 @@ export const useStore = create<Store>()(
 
       // Player
       currentChannel:null, playerOpen:false, miniPlayer:false,
-      setCurrentChannel: (ch) => set({ currentChannel:ch, playerOpen:false }),
+      setCurrentChannel: (ch) => set({ currentChannel:ch }),
       playMedia: (ch) => set({ currentChannel:ch, playerOpen:true }),
       setPlayerOpen: (v) => set({ playerOpen:v }),
       setMiniPlayer: (v) => set({ miniPlayer:v }),
